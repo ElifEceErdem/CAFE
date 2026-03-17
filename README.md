@@ -116,11 +116,28 @@ pip install scipy numpy pandas networkx pymoo
 
 ## Data
 
-Datasets are expected at `../../data/SNAP/<dataset_name>/` relative to the `experiments/` directory (i.e., `data/SNAP/` two levels above the repo root), or passed via `--data_path`.
+Datasets live under `data/SNAP/<dataset_name>/` inside the repo:
 
-Supported datasets: `brightkite`, `ego-facebook`, `facebook`, `oklahoma`, `pokec_n`, `pokec_z`, `unc`
+```
+data/SNAP/
+├── brightkite/          # gitignored (large)
+├── ego-facebook/
+├── facebook/            # gitignored (large)
+├── oklahoma/
+├── pokec_n/             # gitignored (large)
+├── pokec_z/             # gitignored (large)
+└── unc/
+```
 
-For temporal datasets (e.g., Brightkite), a pre-split file can be provided via `--split_file`.
+The folders `brightkite`, `facebook`, `pokec_n`, and `pokec_z` are excluded from version control via `.gitignore` due to their size and must be obtained separately.
+
+Each dataset folder contains `raw/` and `processed/` subdirectories. Brightkite also includes a pre-computed temporal split (`temporal_split.pt`) used via `--split_file`.
+
+When running experiments, pass:
+```bash
+--data_path data/SNAP                                        # from repo root
+--split_file data/SNAP/brightkite/temporal_split.pt         # for Brightkite
+```
 
 ---
 
@@ -132,8 +149,8 @@ All scripts are run from the `experiments/` directory.
 ```bash
 python run_cafe.py \
     --data_name brightkite \
-    --data_path ../../data/SNAP \
-    --split_file ../../data/SNAP/brightkite/temporal_split.pt \
+    --data_path data/SNAP \
+    --split_file data/SNAP/brightkite/temporal_split.pt \
     --encoder HLGNN --predictor MLP \
     --epochs 300 --patience 50 --batch_size 16384 --lr 0.001 --runs 3 \
     --penalization_mode inproc \
@@ -151,8 +168,8 @@ python run_cafe.py \
 ```bash
 python run_cafe.py \
     --data_name brightkite \
-    --data_path ../../data/SNAP \
-    --split_file ../../data/SNAP/brightkite/temporal_split.pt \
+    --data_path data/SNAP \
+    --split_file data/SNAP/brightkite/temporal_split.pt \
     --encoder HLGNN --predictor MLP \
     --epochs 300 --patience 50 --batch_size 16384 --lr 0.001 --runs 3 \
     --penalization_mode preproc \
@@ -186,8 +203,8 @@ python run_cafe.py \
 ```bash
 python run_cafe_p.py \
     --data_name brightkite \
-    --data_path ../../data/SNAP \
-    --split_file ../../data/SNAP/brightkite/temporal_split.pt \
+    --data_path data/SNAP \
+    --split_file data/SNAP/brightkite/temporal_split.pt \
     --encoder HLGNN --predictor MLP \
     --epochs 300 --patience 50 --batch_size 16384 --lr 0.001 --runs 3 \
     --beta_ra "1.0" \
@@ -209,7 +226,7 @@ python run_cafe_p.py \
 # CI-In
 python run_coreness_inverse.py \
     --data_name brightkite \
-    --data_path ../../data/SNAP \
+    --data_path data/SNAP \
     --encoder HLGNN --predictor MLP \
     --epochs 300 --patience 50 --batch_size 16384 --lr 0.001 --runs 1 \
     --fairness_method coreness_inverse_inproc \
@@ -226,7 +243,7 @@ python run_coreness_inverse.py \
 ```bash
 python run_mobility_boost.py \
     --data_name brightkite \
-    --data_path ../../data/SNAP \
+    --data_path data/SNAP \
     --encoder HLGNN --predictor MLP \
     --epochs 300 --patience 50 --batch_size 16384 --lr 0.001 --runs 1 \
     --coreness_alpha 1.0 \
@@ -246,7 +263,7 @@ python run_mobility_boost.py \
 | Argument | Description | Default |
 |---|---|---|
 | `--data_name` | Dataset name | `ego-facebook` |
-| `--data_path` | Path to dataset root | `../../data/SNAP` |
+| `--data_path` | Path to dataset root | `data/SNAP` |
 | `--split_file` | Pre-computed split file (for temporal datasets) | `None` |
 | `--encoder` | GNN encoder (`HLGNN`) | `HLGNN` |
 | `--predictor` | Link predictor (`MLP`) | `MLP` |
