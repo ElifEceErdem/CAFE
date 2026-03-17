@@ -55,6 +55,12 @@ CAFE/
 │   ├── model_ra_reg.py         # RA model with regularization
 │   ├── ra_features.py          # RA feature extraction
 │   └── ra_sampler.py           # RA-based sampling
+|
+├── data/                       # Datasets
+│   ├── SNAP                   
+│       ├── ego-facebook 
+│       ├── oklahoma
+│       └── unc          
 │
 ├── fairness_methods/           # Fairness intervention implementations
 │   ├── inprocessing.py         # FairnessAwareModel, coreness-inverse loss, mobility-boost aggregation
