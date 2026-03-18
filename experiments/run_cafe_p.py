@@ -25,7 +25,7 @@ from core import (
     save_multi_lambda_results, create_experiment_info
 )
 from core.evaluation import compute_metrics_from_recs, compute_equality_gain_metrics, make_predictor_score_fn
-from model import BaseModel
+from backbone.model import BaseModel
 from fairness_methods.reranking_coreness import CorenessReRanker
 from metrics.centrality_equality_gain import compute_all_centrality_equality_gains
 from metrics.demographics import compute_demographic_metrics, compute_demographic_parity_ratio_change
@@ -119,17 +119,6 @@ def main():
     
     betas = [float(x) for x in args.beta_ra.split(',')]
     lambdas = [float(x) for x in args.lambda_mobility.split(',')]
-    
-    # We will iterate Betas as primary "Lambda" variable for the report structure,
-    # OR we can sweep Lambda for a fixed Beta.
-    # The user is interested in "Better Precision AND Equality".
-    # Let's fix a "Good" Beta (found via grid logic or just trying multiple) and sweep Lambda.
-    # But for this script, let's treat (Beta, Lambda) pairs as the experimental variable?
-    # No, reporting tools expect single parameter sweep.
-    # Let's sweep Beta for now, while holding Lambda fixed (or vice versa).
-    # Actually, we want to see the trade-off.
-    # Let's sweep Beta, and for each Beta, apply one or two Lambdas?
-    # To fit `results_compare` format: we'll create keys like `beta_1.0_lambda_0.3`.
     
     print("="*80)
     print(f"HYBRID FAIRNESS EXPERIMENT: GNN + {args.beta_ra} * RA")

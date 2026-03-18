@@ -33,7 +33,7 @@ from core import (
     save_multi_lambda_results
 )
 from core.evaluation import compute_baseline_metrics, compute_fairness_metrics_with_coreness
-from model import BaseModel
+from backbone.model import BaseModel
 from metrics.degree_analysis import analyze_degree_effects_comparison
 
 

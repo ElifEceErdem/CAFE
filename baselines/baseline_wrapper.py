@@ -30,11 +30,6 @@ from snap_evaluator import SNAPEvaluator
 import os
 import sys
 
-# Add SNAP to path
-snap_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../SNAP'))
-if snap_path not in sys.path:
-    sys.path.append(snap_path)
-
 
 class BaselineWrapper:
     """Wrapper to make baseline models compatible with evaluation framework"""
@@ -766,7 +761,7 @@ class BaselineWrapper:
         from torch.utils.data import DataLoader
         import sys
         import os
-        snap_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../SNAP'))
+        snap_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../SNAP'))
         if snap_path not in sys.path:
             sys.path.insert(0, snap_path)
             
@@ -1296,13 +1291,6 @@ class BaselineWrapper:
                 te_t = train_edges
                 
             row, col = te_t
-            # degrees = degree(row, self.num_nodes) # Out-degree
-            # For undirected graph, typically we want total degree.
-            # If edges are stored as (u,v) and (v,u), then degree(row) is enough.
-            # If edges are stored as (u,v) only (upper triangle), we need degree(row) + degree(col).
-            # We can check if E_train ~ E_expected.
-            # Safe bet: compute degree based on unique connections if needed, or simply sum.
-            # Let's assume input is full edge index (undirected) as typical in GNN training.
             d = degree(row, self.num_nodes)
             
         else:

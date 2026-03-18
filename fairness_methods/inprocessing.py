@@ -2,26 +2,19 @@ from typing import Tuple, Dict, Any
 import torch
 import os
 import sys
-# Path Fix: Navigate to SNAP folder to find model.py
-current_dir = os.path.dirname(os.path.abspath(__file__))
-snap_path = os.path.abspath(os.path.join(current_dir, '../../SNAP'))
-if snap_path not in sys.path:
-    sys.path.append(snap_path)
-
-# Path Fix: Add metrics folder for networked_inequality import
-metrics_path = os.path.abspath(os.path.join(current_dir, '../metrics'))
-if metrics_path not in sys.path:
-    sys.path.append(metrics_path)
 
 try:
-    from model import BaseModel
-    from utils import get_pos_neg_edges, get_pos_neg_edges_fair
-    from loss import auc_loss, ce_loss, info_nce_loss, hinge_auc_loss 
+    from backbone.model import BaseModel
+    from backbone.utils import get_pos_neg_edges, get_pos_neg_edges_fair
+    from backbone.loss import auc_loss, ce_loss, info_nce_loss, hinge_auc_loss
     from torch.utils.data import DataLoader
-    from torch_sparse import SparseTensor # Added for Contrastive Learning
 except ImportError:
     # Fallback if running from a different context
     BaseModel = object
+
+try:
+    from torch_sparse import SparseTensor
+except ImportError:
     SparseTensor = None
 
 # ==================== FAIRNESS-AWARE LOSS FUNCTIONS ====================

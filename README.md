@@ -105,17 +105,39 @@ CAFE/
 
 ## Installation
 
-```bash
-conda create -n cafe python=3.9
-conda activate cafe
+### Option 1: From the provided environment file (recommended)
 
-# PyTorch + PyG (adjust CUDA version as needed)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install torch_geometric
-pip install torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.0.0+cu118.html
+An `environment.yml` file is included in the repository, exported from the working `hl_gnn` environment.
+
+```bash
+# Create the environment from the file
+conda env create -f environment.yml
+
+# Activate the environment
+conda activate hl_gnn
+```
+
+To export your current environment state (e.g. after adding new packages):
+
+```bash
+conda env export > environment.yml
+```
+
+### Option 2: Manual setup
+
+```bash
+conda create -n hl_gnn python=3.10
+conda activate hl_gnn
+
+# PyTorch + CUDA 11.8
+conda install pytorch=2.1.0 pytorch-cuda=11.8 -c pytorch -c nvidia
+
+# PyTorch Geometric + extensions
+conda install pytorch_geometric pytorch-scatter pytorch-sparse pytorch-cluster -c pyg
 
 # Other dependencies
-pip install scipy numpy pandas networkx pymoo
+conda install numpy scipy pandas scikit-learn matplotlib networkx tqdm gensim pymoo -c conda-forge
+pip install python-louvain scikit-network seaborn
 ```
 
 ---

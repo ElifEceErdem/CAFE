@@ -1,7 +1,7 @@
 
 import torch
 import torch.nn.functional as F
-from model import BaseModel
+from backbone.model import BaseModel
 from torch.utils.data import DataLoader
 import numpy as np
 import scipy.sparse as sp
@@ -57,7 +57,7 @@ class RARegModel(BaseModel):
         # No, the task is RA-Regularized, usually with standard random negatives or whatever is passed.
         
         # Let's import get_pos_neg_edges
-        from utils import get_pos_neg_edges
+        from backbone.utils import get_pos_neg_edges
         
         # We need to get the "structure" that BaseModel uses. 
         # It seems it gets `neg_train_edge` which is [E, num_neg, 2]?

@@ -1,6 +1,6 @@
 
 import torch
-from model import BaseModel
+from backbone.model import BaseModel
 from core.ra_sampler import ra_guided_neg_sample
 from torch.utils.data import DataLoader
 

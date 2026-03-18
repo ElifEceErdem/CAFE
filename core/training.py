@@ -3,7 +3,7 @@ import copy
 import sys
 import torch
 from tqdm import tqdm
-from snap_evaluator import SNAPEvaluator
+from backbone.snap_evaluator import SNAPEvaluator
 
 def train_model(model, data, split_edge, args, patience=50):
     """Full training logic for BaseModel architecture with progress tracking."""

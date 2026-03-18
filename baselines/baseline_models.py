@@ -12,13 +12,25 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as ckpt
 import numpy as np
-from torch_geometric.nn import GCNConv, SAGEConv
+from torch_geometric.nn import GCNConv, SAGEConv, GATConv, GCNConv
 from torch_geometric.nn.models import LightGCN
-from torch_geometric.utils import to_undirected
+from torch_geometric.utils import to_undirected, remove_self_loops, add_self_loops, softmax
 from sklearn.metrics.pairwise import cosine_similarity
 import networkx as nx
 from gensim.models import Word2Vec
 from tqdm import tqdm
+
+from typing import List, Optional
+from typing import Union, Tuple, Callable
+import torch
+
+from torch import Tensor
+import torch.nn as nn
+from torch_geometric.nn.conv import MessagePassing
+from torch_geometric.nn.dense.linear import Linear
+from torch_geometric.nn.inits import glorot, zeros, reset
+from torch_geometric.typing import OptPairTensor, Adj, Size, OptTensor
+from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 
 # ==================== HEURISTIC BASELINES ====================
@@ -283,8 +295,6 @@ class RandomWalkEmbedding:
 
 
 # ==================== GNN BASELINE ====================
-
-# In baseline_models.py, update PureGNN class
 
 class PureGNN(torch.nn.Module):
     """Pure GNN without HLGNN's advanced features - NOW WITH FAIRNESS SUPPORT"""
@@ -616,20 +626,6 @@ class RandomBaseline:
         
         return recs_by_u
 
-from typing import List, Optional
-from typing import Union, Tuple, Callable
-import torch
-
-from torch import Tensor
-import torch.nn as nn
-from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.nn.dense.linear import Linear
-from torch_geometric.nn.inits import glorot, zeros, reset
-from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
-from torch_geometric.nn import GATConv, GCNConv
-from torch_geometric.typing import OptPairTensor, Adj, Size, OptTensor
-from torch_geometric.nn.conv.gcn_conv import gcn_norm
-import torch.nn.functional as F
 
 class HGNConv(MessagePassing):
 

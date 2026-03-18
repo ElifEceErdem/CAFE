@@ -5,18 +5,12 @@ import torch
 import torch_geometric.transforms as T
 from torch_sparse import SparseTensor
 
-# Path Fix: Add the SNAP folder to sys.path to use your original snap_dataset.py
-current_dir = os.path.dirname(os.path.abspath(__file__))
-snap_path = os.path.abspath(os.path.join(current_dir, '../../SNAP'))
-if snap_path not in sys.path:
-    sys.path.append(snap_path)
-
-from snap_dataset import SNAPDataset
-from utils import gcn_normalization, adj_normalization
+from backbone.snap_dataset import SNAPDataset
+from backbone.utils import gcn_normalization, adj_normalization
 
 class DataConfig:
     """Configuration for dataset loading and preprocessing."""
-    def __init__(self, data_name='ego-facebook', data_path='../../data/SNAP', 
+    def __init__(self, data_name='ego-facebook', data_path='../data/SNAP', 
                  val_ratio=0.05, test_ratio=0.1, encoder='HLGNN', device='cuda:0'):
         self.data_name = data_name
         self.data_path = data_path

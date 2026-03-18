@@ -10,13 +10,8 @@ from tqdm import tqdm
 import sys
 import os
 
-# Add SNAP to path for imports
-snap_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../SNAP'))
-if snap_path not in sys.path:
-    sys.path.append(snap_path)
-
-from snap_evaluator import SNAPEvaluator
-from core.evaluation import compute_baseline_metrics, compute_fairness_metrics_with_advanced
+from backbone.snap_evaluator import SNAPEvaluator
+from .evaluation import compute_baseline_metrics, compute_fairness_metrics_with_advanced
 from fairness_methods.inprocessing import dropout_adj_coreness
 
 def train_inprocessing_model(model, data, split_edge, args, degrees, patience=50, 
@@ -115,7 +110,7 @@ def train_inprocessing_model(model, data, split_edge, args, degrees, patience=50
              # Rebuild SparseTensor from dropped edges
              # Lazy import
              from torch_sparse import SparseTensor
-             from utils import gcn_normalization  # Ensure this is available from SNAP/utils.py
+             from backbone.utils import gcn_normalization  # Ensure this is available from SNAP/utils.py
              
              dropped_adj_t = SparseTensor(row=dropped_edge_index[1], col=dropped_edge_index[0], 
                                           sparse_sizes=(data.num_nodes, data.num_nodes)).to(data.edge_index.device)
