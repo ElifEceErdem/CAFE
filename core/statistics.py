@@ -468,7 +468,7 @@ def save_results(filepath, experiment_info, baseline_stats, lambda_stats,
     with open(filepath, 'w') as f:
         json.dump(results_dict, f, indent=2)
     
-    print(f"\n✓ Detailed results saved to {filepath}")
+    print(f"\n Detailed results saved to {filepath}")
 
 
 def _serialize_stats(stats):

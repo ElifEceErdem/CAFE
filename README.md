@@ -23,6 +23,16 @@ CAFE introduces several variants that differ in *when* and *how* fairness is enf
 
 The **HLGNN baseline** is run via `run_cafe_p.py` with `--beta_ra 0.0 --lambda_mobility 0.0`.
 
+#### Optional Methods (not reported in paper)
+
+The following variants were explored during development but did not show superior performance over the methods above and are therefore **not included in the paper results**:
+
+| Variant | Script | Fairness Stage | Mechanism |
+|---|---|---|---|
+| **CI-Post** | `run_mobility_boost.py` | Post-processing | Coreness-inverse penalty re-ranking (`--boosting_mode continuous --reranking_approach penalty`) |
+| **MB-In** | `run_coreness_inverse.py` | In-processing | Mobility boost in-processing loss (`--fairness_method mobility_boost_inproc`) |
+| **MB-Pre** | `run_coreness_inverse.py` | Pre-processing | Mobility boost pre-processing adjacency modification (`--fairness_method mobility_boost_preproc`) |
+
 ### Key Concepts
 
 - **Coreness**: H-index based structural measure; high-coreness nodes are densely connected "core" nodes, low-coreness nodes are "peripheral".
@@ -302,6 +312,23 @@ python run_mobility_boost.py \
 | `--use_equality_gain` | Compute Degree EG metrics | `True` |
 | `--use_centrality_gain` | Compute PageRank/Closeness EG metrics | `True` |
 | `--centrality_types` | Centrality types for EG | `pagerank,closeness` |
+
+---
+
+## Best Hyperparameter Configurations
+
+The best hyperparameter configurations selected via Pareto front + ASF for each method and dataset (as reported in the paper) are provided in [`analysis/best_configs.csv`](analysis/best_configs.csv).
+
+Column definitions (corresponding to actual CLI argument names):
+
+| Column | Argument | Used by | Description |
+|---|---|---|---|
+| `lambda_fair` | `--lambda_fair` | `run_cafe.py` (in-proc), `run_coreness_inverse.py` | Fairness penalty weight (in-processing) or adjacency modification strength (pre-processing) |
+| `preproc_alpha` | `--preproc_alpha` | `run_cafe.py` (pre-proc) | Pre-processing adjacency modification strength |
+| `beta_ra` | `--beta_ra` | `run_cafe.py`, `run_cafe_p.py` | Weight for RA score in hybrid combination |
+| `lambda_mobility` | `--lambda_mobility` | `run_cafe.py`, `run_cafe_p.py`, `run_mobility_boost.py` | Mobility boost / penalty strength at inference |
+
+Empty cells indicate that the parameter is not applicable to the method. Baseline methods (HLGNN, Cross-Link Bias, FairAdj) have no tuned fairness hyperparameters.
 
 ---
 

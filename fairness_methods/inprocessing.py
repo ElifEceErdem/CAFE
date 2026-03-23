@@ -1,7 +1,5 @@
 from typing import Tuple, Dict, Any
 import torch
-import os
-import sys
 
 try:
     from backbone.model import BaseModel
@@ -24,11 +22,11 @@ class FairnessAwareLoss:
     Base class for fairness-aware loss functions.
     Combines task loss (link prediction) with fairness penalty.
     """
-    
+
     def __init__(self, base_loss_name='AUC', lambda_fair=0.1):
         self.base_loss_name = base_loss_name
         self.lambda_fair = lambda_fair
-    
+
     def compute_base_loss(self, pos_out, neg_out, num_neg):
         """Compute the base link prediction loss"""
         if self.base_loss_name == 'CE':
@@ -39,15 +37,15 @@ class FairnessAwareLoss:
             return hinge_auc_loss(pos_out, neg_out, num_neg)
         else:  # AUC
             return auc_loss(pos_out, neg_out, num_neg)
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, **kwargs):
         """To be implemented by subclasses"""
         raise NotImplementedError
-    
+
     def __call__(self, pos_out, neg_out, num_neg, pos_edge, neg_edge, **kwargs):
         """
         Compute total loss = base_loss + lambda * fairness_penalty
-        
+
         Args:
             pos_out: Predictions for positive edges [batch_size]
             neg_out: Predictions for negative edges [batch_size * num_neg]
@@ -60,44 +58,44 @@ class FairnessAwareLoss:
         fairness_penalty = self.compute_fairness_penalty(
             pos_edge, neg_edge, pos_out, neg_out, **kwargs
         )
-        
+
         total_loss = base_loss + self.lambda_fair * fairness_penalty
-        
+
         return total_loss, base_loss.item(), fairness_penalty.item()
 
 
 class PAFairnessLoss(FairnessAwareLoss):
     """
     Preferential Attachment (PA) based fairness loss.
-    
+
     Penalizes predictions on high-degree node pairs to reduce rich-get-richer effect.
-    
+
     Intuition:
     - High scores on high-degree pairs → reinforce existing hubs
     - Penalty: score * PA_score(u,v) where PA_score = sqrt(deg_u * deg_v)
     """
-    
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, 
+
+    def __init__(self, base_loss_name='AUC', lambda_fair=0.1,
                  pa_aggregation='product', normalize=True):
         super().__init__(base_loss_name, lambda_fair)
         self.pa_aggregation = pa_aggregation
         self.normalize = normalize
         self.max_pa_score = None
-    
+
     def compute_pa_score(self, degrees, edges):
         """
         Compute PA score for edges.
-        
+
         Args:
             degrees: Node degrees [num_nodes]
             edges: Edge indices [num_edges, 2]
-        
+
         Returns:
             PA scores [num_edges]
         """
         deg_u = degrees[edges[:, 0]]
         deg_v = degrees[edges[:, 1]]
-        
+
         if self.pa_aggregation == 'product':
             pa_scores = torch.sqrt(deg_u.float() * deg_v.float())
         elif self.pa_aggregation == 'sum':
@@ -108,24 +106,24 @@ class PAFairnessLoss(FairnessAwareLoss):
             pa_scores = torch.log1p(deg_u.float() * deg_v.float())
         else:
             raise ValueError(f"Unknown pa_aggregation: {self.pa_aggregation}")
-        
+
         # Normalize to [0, 1]
         if self.normalize and self.max_pa_score is not None:
             pa_scores = pa_scores / (self.max_pa_score + 1e-8)
-        
+
         return pa_scores
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, degrees=None, **kwargs):
         """
         Compute PA-based fairness penalty.
-        
+
         Penalty = mean(|predictions| * PA_scores)
-        
+
         This encourages the model to give lower scores to high-degree pairs.
         """
         if degrees is None:
             raise ValueError("degrees required for PA fairness loss")
-        
+
         # Initialize max PA score if not set
         if self.max_pa_score is None:
             max_deg = degrees.max().float()
@@ -137,124 +135,116 @@ class PAFairnessLoss(FairnessAwareLoss):
                 self.max_pa_score = max_deg
             elif self.pa_aggregation == 'log_product':
                 self.max_pa_score = torch.log1p(max_deg * max_deg)
-        
+
         # Compute PA scores for positive edges
         pa_pos = self.compute_pa_score(degrees, pos_edge)
-        
-        # Reshape negative edges from [batch, num_neg, 2] to [batch*num_neg, 2]
-        # neg_edge_flat = neg_edge.view(-1, 2)
-        # pa_neg = self.compute_pa_score(degrees, neg_edge_flat)
-        
+
         # Penalty: penalize high scores on high-PA pairs
-        # Using sigmoid to ensure predictions are in [0, 1]
         pos_probs = torch.sigmoid(pos_out)
-        # neg_probs = torch.sigmoid(neg_out)
-        
         penalty_pos = (pos_probs * pa_pos).mean()
-        # penalty_neg = (neg_probs * pa_neg).mean()
-        
+
         # We want to reduce scores on high-PA pairs
-        total_penalty = penalty_pos # + 0.1 * penalty_neg
-        
+        total_penalty = penalty_pos
+
         return total_penalty
 
 
 class ExposureFairnessLoss(FairnessAwareLoss):
     """
     Exposure-based fairness loss.
-    
+
     Penalizes repeated high scores to frequently-predicted nodes.
     Maintains running exposure counts during training.
-    
+
     Intuition:
     - Track how often each node is predicted with high score
     - Penalize models that keep predicting same popular nodes
     """
-    
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, 
+
+    def __init__(self, base_loss_name='AUC', lambda_fair=0.1,
                  num_nodes=None, exposure_decay=1.0):
         super().__init__(base_loss_name, lambda_fair)
         self.num_nodes = num_nodes
         self.exposure_decay = exposure_decay
-        
+
         # Exposure tracking (momentum-based)
         self.node_exposure = None
         self.max_exposure = 1.0
-    
+
     def reset_exposure(self, device):
         """Reset exposure counters (call at start of each epoch)"""
         if self.num_nodes is None:
             raise ValueError("num_nodes must be set")
         self.node_exposure = torch.zeros(self.num_nodes, device=device)
         self.max_exposure = 1.0
-    
+
     def update_exposure(self, edges, scores):
         """
         Update exposure counts based on predictions.
-        
+
         Args:
             edges: Edge indices [num_edges, 2]
             scores: Prediction scores [num_edges]
         """
         if self.node_exposure is None:
             self.reset_exposure(edges.device)
-        
+
         # Decay previous exposure (momentum)
         self.node_exposure *= self.exposure_decay
-        
+
         # Add new exposure (weighted by prediction score)
         probs = torch.sigmoid(scores).detach()
-        
+
         # Accumulate exposure for destination nodes
         dst = edges[:, 1]
-        
+
         # Ensure we only update valid nodes (safety check matching original logic)
         mask = dst < self.num_nodes
-        
+
         if mask.all():
             self.node_exposure.index_add_(0, dst, probs.view(-1))
         else:
             self.node_exposure.index_add_(0, dst[mask], probs.view(-1)[mask])
-        
+
         # Update max for normalization
         self.max_exposure = max(self.max_exposure, self.node_exposure.max().item())
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, **kwargs):
         """
         Compute exposure-based fairness penalty.
-        
+
         Penalty = mean(predictions * normalized_exposure)
-        
+
         This discourages high scores to nodes with high exposure.
         """
         if self.node_exposure is None:
             self.reset_exposure(pos_edge.device)
-        
+
         # Get normalized exposure for edge destinations
         exposure_norm = self.node_exposure / (self.max_exposure + 1e-8)
-        
+
         # Positive edges
         pos_dst = pos_edge[:, 1]
         exp_pos = exposure_norm[pos_dst]
-        
+
         # Negative edges
         neg_edge_flat = neg_edge.view(-1, 2)
         neg_dst = neg_edge_flat[:, 1]
         exp_neg = exposure_norm[neg_dst]
-        
+
         # Penalty: high scores to high-exposure nodes
         pos_probs = torch.sigmoid(pos_out)
         neg_probs = torch.sigmoid(neg_out)
-        
+
         penalty_pos = (pos_probs * exp_pos).mean()
         penalty_neg = (neg_probs * exp_neg).mean()
-        
+
         total_penalty = penalty_pos + 0.1 * penalty_neg
-        
+
         # Update exposure for next batch
         self.update_exposure(pos_edge, pos_out)
         self.update_exposure(neg_edge_flat, neg_out)
-        
+
         return total_penalty
 
 
@@ -262,14 +252,14 @@ class HybridFairnessLoss(FairnessAwareLoss):
     """
     Hybrid fairness loss combining PA and Exposure penalties.
     """
-    
+
     def __init__(self, base_loss_name='AUC', lambda_fair=0.1, pa_aggregation='product', exposure_decay=1.0, normalize=True, num_nodes=None,
                  pa_weight=0.5, exposure_weight=0.5, **kwargs):
         super().__init__(base_loss_name, lambda_fair)
         self.pa_weight = pa_weight
         self.exposure_weight = exposure_weight
         self.num_nodes = num_nodes
-        
+
         # PA part: DOES NOT need num_nodes
         self.pa_loss = PAFairnessLoss(
             base_loss_name=base_loss_name,
@@ -285,10 +275,10 @@ class HybridFairnessLoss(FairnessAwareLoss):
             num_nodes=num_nodes,
             exposure_decay=exposure_decay
         )
-    
+
     def reset_exposure(self, device):
         self.exposure_loss.reset_exposure(device)
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, **kwargs):
         """Combine PA and Exposure penalties"""
         pa_penalty = self.pa_loss.compute_fairness_penalty(
@@ -297,10 +287,10 @@ class HybridFairnessLoss(FairnessAwareLoss):
         exposure_penalty = self.exposure_loss.compute_fairness_penalty(
             pos_edge, neg_edge, pos_out, neg_out, **kwargs
         )
-        
-        total_penalty = (self.pa_weight * pa_penalty + 
+
+        total_penalty = (self.pa_weight * pa_penalty +
                          self.exposure_weight * exposure_penalty)
-        
+
         return total_penalty
 
 
@@ -309,27 +299,31 @@ class HybridFairnessLoss(FairnessAwareLoss):
 class FairnessAwareModel(BaseModel):
     """
     Extension of BaseModel with fairness-aware training.
+
+    Supports:
+    - inproc_pa: PAFairnessLoss
+    - inproc_exposure: ExposureFairnessLoss
+    - inproc_hybrid: HybridFairnessLoss
+    - coreness_inverse_inproc: CorenessInverseLoss (suppressive)
+    - mobility_boost_inproc: MobilityBoostLoss (promotive)
+    - none: No fairness loss (baseline)
     """
-    
-    def __init__(self, fairness_method='none', lambda_fair=0.1, 
-                 pa_aggregation='product', num_nodes=None, 
-                 exposure_decay=1.0, margin=1.0, 
-                 lambda_ssl=0.1, tau=0.2, **kwargs):  # Added lambda_ssl and tau
-        
+
+    def __init__(self, fairness_method='none', lambda_fair=0.1,
+                 pa_aggregation='product', num_nodes=None,
+                 exposure_decay=1.0, **kwargs):
+
         # Store fairness-specific parameters BEFORE calling super().__init__()
         self.fairness_method = fairness_method
         self.exposure_decay = exposure_decay
         self.pa_aggregation = pa_aggregation
-        self.margin = margin
-        self.lambda_ssl = lambda_ssl
-        self.tau = tau
-        
+
         # Extract coreness_alpha before passing kwargs to BaseModel
         self.coreness_alpha = kwargs.pop('coreness_alpha', 1.0)
-        
+
         # Now call parent __init__ with ONLY the kwargs it expects
         super().__init__(num_nodes=num_nodes, **kwargs)
-        
+
         # Initialize fairness loss AFTER parent init
         if fairness_method == 'inproc_pa':
             self.fairness_loss = PAFairnessLoss(
@@ -352,20 +346,6 @@ class FairnessAwareModel(BaseModel):
                 num_nodes=num_nodes,
                 exposure_decay=exposure_decay
             )
-        elif fairness_method == 'fair_margin' or fairness_method == 'contrastive_fair_margin':
-            self.fairness_loss = FairMarginLoss(
-                base_loss_name=kwargs['loss_func'],
-                lambda_fair=lambda_fair,
-                margin=margin
-            )
-        elif fairness_method == 'inproc_within_group':
-            self.fairness_loss = WithinGroupFairnessLoss(
-                base_loss_name=kwargs['loss_func'],
-                lambda_fair=lambda_fair
-            )
-        elif fairness_method == 'contrastive_sgl':
-            # No base fairness loss (standard link prediction)
-            self.fairness_loss = None
         elif fairness_method == 'coreness_inverse_inproc':
             self.fairness_loss = CorenessInverseLoss(
                 base_loss_name=kwargs['loss_func'],
@@ -380,22 +360,18 @@ class FairnessAwareModel(BaseModel):
             )
         else:
             self.fairness_loss = None
-    
-    def train_with_fairness(self, data, split_edge, batch_size, neg_sampler_name, num_neg, degrees=None, coreness=None, social_groups=None, sens_attr=None):
+
+    def train_with_fairness(self, data, split_edge, batch_size, neg_sampler_name, num_neg, degrees=None, coreness=None):
         """
         Training loop with fairness-aware loss.
-        Supports:
-        - In-processing penalties (PA, Exposure)
-        - Fair Margin Loss
-        - Contrastive + Fair Margin
         """
         self.encoder.train()
         self.predictor.train()
-        
+
         # Reset exposure if using exposure-based method
         if self.fairness_method in ['inproc_exposure', 'inproc_hybrid']:
             self.fairness_loss.reset_exposure(self.device)
-        
+
         # Use fair sampling if available
         try:
              pos_train_edge, neg_train_edge = get_pos_neg_edges_fair(
@@ -414,314 +390,160 @@ class FairnessAwareModel(BaseModel):
                 neg_sampler_name=neg_sampler_name,
                 num_neg=num_neg
             )
-        
+
         pos_train_edge = pos_train_edge.to(self.device)
         neg_train_edge = neg_train_edge.to(self.device)
-        
+
         if degrees is not None:
             degrees = degrees.to(self.device)
-            
+
         if coreness is not None:
             coreness = coreness.to(self.device)
 
-        if social_groups is not None:
-            social_groups = social_groups.to(self.device)
-        if sens_attr is not None:
-            sens_attr = sens_attr.to(self.device)
-
         total_loss = total_base_loss = total_fair_penalty = 0
         total_examples = 0
-        
-        # Check if doing Contrastive Learning
-        is_contrastive = (self.fairness_method == 'contrastive_fair_margin' or 
-                          self.fairness_method == 'contrastive_sgl')
-        
+
         for perm in DataLoader(range(pos_train_edge.size(0)), batch_size, shuffle=True):
             self.optimizer.zero_grad()
-            
+
             input_feat = self.create_input_feat(data)
-            
-            # --- Contrastive Learning Augmentation ---
-            ssl_loss = 0.0
-            if is_contrastive and coreness is not None:
-                # Generate two views with coreness-aware dropout
-                edge_index = data.edge_index
-                
-                # View 1
-                aug_edge_index_1 = dropout_adj_coreness(edge_index, coreness, p=0.3)
-                if SparseTensor is not None:
-                    # Creating SparseTensor on the fly can be slow, but it's necessary for augmented views
-                    # We might want to move this outside the batch loop if memory permits, but for large graphs it's tricky.
-                    # Since we do it per batch in standard SGL, but here standard GNNs usually use full graph.
-                    # Wait, if we use full graph GNN, we should generate views ONCE per epoch or use subgraph sampling.
-                    # But the provided code structure uses full graph `data.adj_t` in `self.encoder`.
-                    # So we should probably move this generation outside the batch loop if we want speed,
-                    # BUT `DataLoader` iterates over EDGES, not nodes. The GNN runs on the FULL graph.
-                    # If we run GNN on full graph inside the loop, it's very expensive (GNN forward pass per batch).
-                    # Check original code structure:
-                    
-                    # Original code:
-                    # for perm in DataLoader(...):
-                    #     h = self.encoder(input_feat, data.adj_t, ...)
-                    
-                    # YES, it runs encoder on FULL graph every batch! This is standard for full-batch GNNs (like GCN/GAT on small graphs).
-                    # For Contrastive Learning, we should also do this.
-                    
-                    aug_adj_1 = SparseTensor.from_edge_index(aug_edge_index_1, sparse_sizes=(self.num_nodes, self.num_nodes)).to(self.device)
-                else:
-                    # Fallback or assume model handles it (unlikely for standard PyG GNNs expecting SparseTensor)
-                    aug_adj_1 = None 
-                
-                # View 2
-                aug_edge_index_2 = dropout_adj_coreness(edge_index, coreness, p=0.3)
-                if SparseTensor is not None:
-                    aug_adj_2 = SparseTensor.from_edge_index(aug_edge_index_2, sparse_sizes=(self.num_nodes, self.num_nodes)).to(self.device)
-                else:
-                     aug_adj_2 = None
-                
-                if aug_adj_1 is not None and aug_adj_2 is not None:
-                    # Forward pass for views
-                    z1 = self.encoder(input_feat, aug_adj_1, None) # edge_weight is None for dropped edges
-                    z2 = self.encoder(input_feat, aug_adj_2, None)
-                    
-                    # Compute SSL Loss (InfoNCE between z1 and z2)
-                    # We contrast node embeddings directly
-                    ssl_loss = self.compute_ssl_loss(z1, z2)
-            
-            # --- Main Task Forward Pass ---
             h = self.encoder(input_feat, data.adj_t, data.edge_weight)
-            
+
             # Get edges for this batch
             pos_edge = pos_train_edge[perm]
             neg_edge = neg_train_edge[perm]
-            
+
             # Predictions
             pos_out = self.predictor(h[pos_edge[:, 0]], h[pos_edge[:, 1]])
             neg_edge_flat = neg_edge.view(-1, 2)
             neg_out = self.predictor(h[neg_edge_flat[:, 0]], h[neg_edge_flat[:, 1]])
-            
+
             # Compute loss
             if self.fairness_loss is not None:
                 loss, base_loss, fair_penalty = self.fairness_loss(
                     pos_out, neg_out, num_neg,
                     pos_edge, neg_edge,
                     degrees=degrees,
-                    coreness=coreness,
-                    social_groups=social_groups,
-                    sens_attr=sens_attr
+                    coreness=coreness
                 )
-                
-                # ADD SSL LOSS if applicable
-                if is_contrastive:
-                    loss = loss + self.lambda_ssl * ssl_loss
-                    # Update fair_penalty check only for logging? 
-                    # Actually fair_penalty is what comes from FairMargin
-                
+
                 total_base_loss += base_loss * pos_out.size(0)
                 total_fair_penalty += fair_penalty * pos_out.size(0)
             else:
                 base_loss = self.calculate_loss(pos_out, neg_out, num_neg)
                 loss = base_loss
-                
-                # ADD SSL LOSS if applicable (for contrastive_sgl)
-                if is_contrastive:
-                    loss = loss + self.lambda_ssl * ssl_loss
-                
+
                 total_base_loss += base_loss.item() * pos_out.size(0)
-            
+
             # Backward pass
             loss.backward()
-            
+
             if self.clip_norm >= 0:
                 torch.nn.utils.clip_grad_norm_(self.encoder.parameters(), self.clip_norm)
                 torch.nn.utils.clip_grad_norm_(self.predictor.parameters(), self.clip_norm)
-            
+
             self.optimizer.step()
-            
+
             num_examples = pos_out.size(0)
             total_loss += loss.item() * num_examples
             total_examples += num_examples
-        
+
         avg_loss = total_loss / total_examples
         avg_base = total_base_loss / total_examples
         avg_fair = total_fair_penalty / total_examples if self.fairness_loss else 0
-        
+
         return avg_loss, avg_base, avg_fair
-
-    def compute_ssl_loss(self, x, y):
-        """
-        Computes InfoNCE loss between two views x and y.
-        x, y: [num_nodes, hidden_dim]
-        """
-        # Normalize representations
-        x = torch.nn.functional.normalize(x, dim=1)
-        y = torch.nn.functional.normalize(y, dim=1)
-        
-        # We need to sample nodes for contrastive loss to avoid OOM
-        # Sampling batch_size nodes
-        batch_size = 2048
-        num_nodes = x.size(0)
-        
-        if num_nodes > batch_size:
-            perm = torch.randperm(num_nodes)[:batch_size]
-            x = x[perm]
-            y = y[perm]
-        
-        # Similarity matrix
-        # sim(x_i, y_j)
-        sim = torch.mm(x, y.t()) / self.tau  # [B, B]
-        
-        # Positive pairs are on diagonal
-        # Loss = -log( exp(sim_ii) / sum(exp(sim_ij)) )
-        
-        # Numerical stability
-        sim_max, _ = torch.max(sim, dim=1, keepdim=True)
-        sim = sim - sim_max.detach()
-        
-        exp_sim = torch.exp(sim)
-        
-        # Numerator: exp(sim_ii)
-        numerator = torch.diag(exp_sim)
-        
-        # Denominator: sum(exp(sim_ij))
-        denominator = exp_sim.sum(dim=1)
-        
-        loss = -torch.log(numerator / (denominator + 1e-15)).mean()
-        return loss
-
-
-def dropout_adj_coreness(edge_index, coreness, p=0.5, force_undirected=True):
-    """
-    Randomly drops edges with probability proportional to the coreness of connected nodes.
-    
-    Args:
-        edge_index: Edge index [2, num_edges]
-        coreness: Coreness scores [num_nodes]
-        p: Dropout probability scaling factor. 
-           Prop = p * (core_u + core_v) / (max_core * 2)
-        force_undirected: Ensure dropped edges are symmetric
-        
-    Returns:
-        New edge_index
-    """
-    row, col = edge_index
-    
-    # Calculate coreness sum for each edge
-    core_u = coreness[row]
-    core_v = coreness[col]
-    
-    # Normalize coreness to [0, 1] for probability calculation
-    max_core = coreness.max().item()
-    if max_core == 0:
-        return edge_index # safe fallback
-    
-    # Using float conversion to avoid integer division issues
-    edge_coreness = (core_u + core_v).float() / (2.0 * max_core)
-    
-    # Probability of KEEPING edge = 1 - (p * edge_coreness)
-    # Higher coreness -> Higher drop prob -> Lower keep prob
-    keep_prob = 1.0 - (p * edge_coreness)
-    keep_prob = torch.clamp(keep_prob, 0.0, 1.0)
-    
-    # Sample mask
-    mask = torch.bernoulli(keep_prob).to(torch.bool)
-    
-    return edge_index[:, mask]
 
 
 def apply_coreness_inverse_aggregation(adj_t, coreness, alpha=1.0):
     """
     Modifies the adjacency matrix weights to penalize edges connected to high-coreness nodes.
-    
+
     A'_uv = A_uv / (Core(u) * Core(v))^alpha
-    
+
     Args:
         adj_t: SparseTensor [num_nodes, num_nodes]
         coreness: Tensor [num_nodes]
         alpha: Penalty strength
-        
+
     Returns:
         Modified SparseTensor
     """
     if SparseTensor is None:
         raise ImportError("torch_sparse not installed")
-        
+
     # Get rows, cols, and values
     row, col, val = adj_t.coo()
-    
+
     if val is None:
         val = torch.ones(row.size(0), device=row.device)
-    
+
     # Get coreness for each edge
     core_u = coreness[row].float()
     core_v = coreness[col].float()
-    
-    # Avoid division by zero (log(core+e) or just core+1?)
-    # The formula says (Core(u)*Core(v))^alpha. 
-    # Coreness is usually >= 1.
-    # Let's use max(1, core) just in case.
+
+    # Avoid division by zero (coreness >= 1 typically)
     core_u = torch.clamp(core_u, min=1.0)
     core_v = torch.clamp(core_v, min=1.0)
-    
+
     denominator = (core_u * core_v).pow(alpha)
-    
+
     # Apply penalty
     new_val = val / denominator
-    
+
     # Create new SparseTensor
-    new_adj_t = SparseTensor(row=row, col=col, value=new_val, 
+    new_adj_t = SparseTensor(row=row, col=col, value=new_val,
                              sparse_sizes=adj_t.sparse_sizes())
-                             
+
     return new_adj_t
 
 
 def apply_mobility_boost_aggregation(adj_t, coreness, alpha=1.0):
     """
     Modifies the adjacency matrix weights to boost edges connected to low-coreness (periphery) nodes.
-    
+
     A'_uv = A_uv * (1 + alpha * mobility(u) * mobility(v))
     where mobility(v) = 1 / log(percentile(Core(v)) * 100 + e)
-    
+
     This is the pre-processing counterpart of the post-processing mobility boost.
-    
+
     Args:
         adj_t: SparseTensor [num_nodes, num_nodes]
         coreness: Tensor [num_nodes]
         alpha: Boost strength
-        
+
     Returns:
         Modified SparseTensor
     """
     if SparseTensor is None:
         raise ImportError("torch_sparse not installed")
-        
+
     # Get rows, cols, and values
     row, col, val = adj_t.coo()
-    
+
     if val is None:
         val = torch.ones(row.size(0), device=row.device)
-    
+
     # Compute percentile-based coreness (matching post-processing approach)
     coreness_float = coreness.float()
     num_nodes = coreness.size(0)
-    
+
     # Rank-based percentile: rank / N
-    # Sort and assign ranks (average strategy for ties)
     sorted_vals, sorted_idx = torch.sort(coreness_float)
     ranks = torch.zeros_like(coreness_float)
     ranks[sorted_idx] = torch.arange(1, num_nodes + 1, dtype=torch.float32, device=coreness.device)
     percentile = ranks / num_nodes
-    
+
     # Mobility weight: 1 / log(percentile * 100 + e)
     # High for periphery (low percentile), low for core (high percentile)
     scaling_factor = 100.0
     e = 2.71828
     mobility = 1.0 / torch.log(percentile * scaling_factor + e).pow(alpha)
-    
+
     # Get mobility for each edge endpoint
     mob_u = mobility[row]
     mob_v = mobility[col]
-    
+
     # Normalize the product so max boost is bounded
     mob_product = mob_u * mob_v
     max_mob = mob_product.max()
@@ -729,281 +551,136 @@ def apply_mobility_boost_aggregation(adj_t, coreness, alpha=1.0):
         mob_product_norm = mob_product / max_mob  # [0, 1]
     else:
         mob_product_norm = mob_product
-    
+
     # Apply boost: A' = A * (1 + alpha * normalized_mobility)
     multiplier = 1.0 + alpha * mob_product_norm
     new_val = val * multiplier
-    
+
     # Create new SparseTensor
-    new_adj_t = SparseTensor(row=row, col=col, value=new_val, 
+    new_adj_t = SparseTensor(row=row, col=col, value=new_val,
                              sparse_sizes=adj_t.sparse_sizes())
-                             
+
     return new_adj_t
 
 
 class CorenessInverseLoss(FairnessAwareLoss):
     """
     Coreness-Inverse in-processing fairness loss (Suppressive approach).
-    
+
     Penalizes high prediction scores on edges between high-coreness nodes,
     encouraging the model to allocate score capacity to periphery nodes.
-    
+
     Penalty = mean(σ(pos_scores) * coreness_weight(u,v))
     where coreness_weight = (Core(u) * Core(v))^alpha / max_product^alpha
     """
-    
+
     def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0):
         super().__init__(base_loss_name, lambda_fair)
         self.alpha = alpha
         self.max_coreness_product = None
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, coreness=None, **kwargs):
         """
         Compute coreness-inverse penalty.
-        
+
         Penalty = mean(σ(score) * normalized_coreness_product)
         """
         if coreness is None:
             raise ValueError("coreness required for CorenessInverseLoss")
-        
+
         # Get coreness for source and destination of positive edges
         core_u = coreness[pos_edge[:, 0]].float()
         core_v = coreness[pos_edge[:, 1]].float()
-        
+
         # Clamp to avoid zero (coreness >= 1 typically)
         core_u = torch.clamp(core_u, min=1.0)
         core_v = torch.clamp(core_v, min=1.0)
-        
+
         # Compute coreness product weight
         core_product = (core_u * core_v).pow(self.alpha)
-        
+
         # Initialize max for normalization
         if self.max_coreness_product is None:
             max_core = coreness.float().max()
             self.max_coreness_product = (max_core * max_core).pow(self.alpha)
-        
+
         # Normalize to [0, 1]
         core_weight = core_product / (self.max_coreness_product + 1e-8)
-        
+
         # Penalty: high sigmoid scores on high-coreness pairs
         pos_probs = torch.sigmoid(pos_out)
         penalty = (pos_probs * core_weight).mean()
-        
+
         return penalty
 
 
 class MobilityBoostLoss(FairnessAwareLoss):
     """
     Mobility Boost in-processing fairness loss (Promotive approach).
-    
+
     Penalizes the model for giving LOW scores to edges involving periphery nodes,
     encouraging higher predictions for periphery connections.
-    
+
     Penalty = mean((1 - σ(pos_scores)) * mobility_weight(u,v))
     where mobility_weight = 1/log(percentile*100 + e)^alpha (normalized)
-    
+
     This mirrors the post-processing mobility boost formula.
     """
-    
+
     def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0):
         super().__init__(base_loss_name, lambda_fair)
         self.alpha = alpha
         self._mobility_cache = None  # Cache mobility weights per coreness tensor
         self._cache_id = None
-    
+
     def _compute_mobility_weights(self, coreness):
         """Compute percentile-based mobility weights (cached)."""
         cache_id = id(coreness)
         if self._cache_id == cache_id and self._mobility_cache is not None:
             return self._mobility_cache
-        
+
         coreness_float = coreness.float()
         num_nodes = coreness.size(0)
-        
+
         # Rank-based percentile
         sorted_vals, sorted_idx = torch.sort(coreness_float)
         ranks = torch.zeros_like(coreness_float)
         ranks[sorted_idx] = torch.arange(1, num_nodes + 1, dtype=torch.float32, device=coreness.device)
         percentile = ranks / num_nodes
-        
+
         # Mobility: 1 / log(percentile * 100 + e)^alpha
         scaling_factor = 100.0
         e = 2.71828
         mobility = 1.0 / torch.log(percentile * scaling_factor + e).pow(self.alpha)
-        
+
         # Normalize to [0, 1]
         max_mob = mobility.max()
         if max_mob > 0:
             mobility = mobility / max_mob
-        
+
         self._mobility_cache = mobility
         self._cache_id = cache_id
         return mobility
-    
+
     def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, coreness=None, **kwargs):
         """
         Compute mobility boost penalty.
-        
+
         Penalty = mean((1 - σ(score)) * mobility_weight)
         High penalty when periphery edges get low scores.
         """
         if coreness is None:
             raise ValueError("coreness required for MobilityBoostLoss")
-        
+
         mobility = self._compute_mobility_weights(coreness)
-        
+
         # Get mobility weights for edge endpoints (use product for consistency with pre-proc)
         mob_u = mobility[pos_edge[:, 0]]
         mob_v = mobility[pos_edge[:, 1]]
         edge_mobility = mob_u * mob_v
-        
+
         # Penalty: low sigmoid scores on high-mobility (periphery) pairs
         pos_probs = torch.sigmoid(pos_out)
         penalty = ((1.0 - pos_probs) * edge_mobility).mean()
-        
+
         return penalty
-
-
-class WithinGroupFairnessLoss(FairnessAwareLoss):
-    """
-    Within-group fairness regularizer from the Networked Inequality paper.
-    (Eq. 29: Subramonian, Sagun, Sun. ICML 2024, PMLR 235.)
-
-    L_new = L_orig + (lambda_fair / B) * sum_{b in [B]} Delta^(b)
-
-    where Delta^(b) measures the disparity in mean post-sigmoid LP scores
-    between sensitive subgroups within social group b.
-
-    Requires:
-        - social_groups: node-level social group labels (data.y)
-        - sens_attr: node-level binary sensitive attribute (data.sens)
-    These must be passed as kwargs during training.
-    """
-
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1):
-        super().__init__(base_loss_name, lambda_fair)
-
-    def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out,
-                                 social_groups=None, sens_attr=None, **kwargs):
-        """
-        Compute (1/B) * sum_{b} Delta^(b) over the current batch edges.
-
-        Args:
-            pos_edge: Positive edges [batch_size, 2]
-            neg_edge: Negative edges [batch_size, num_neg, 2]
-            pos_out: Raw logit scores for positive edges [batch_size]
-            neg_out: Raw logit scores for negative edges [batch_size * num_neg]
-            social_groups: Social group labels [num_nodes]
-            sens_attr: Binary sensitive attribute [num_nodes]
-        """
-        if social_groups is None or sens_attr is None:
-            raise ValueError(
-                "WithinGroupFairnessLoss requires social_groups and sens_attr. "
-                "Pass them via train_with_fairness(..., social_groups=..., "
-                "sens_attr=...)."
-            )
-
-        from networked_inequality import compute_avg_within_group_unfairness
-
-        # Combine positive and negative edges and scores into one set,
-        # matching the original paper's computation on edge_label_index.
-        neg_edge_flat = neg_edge.view(-1, 2)
-        all_edges = torch.cat([pos_edge, neg_edge_flat], dim=0)
-        all_scores = torch.cat([pos_out.view(-1), neg_out.view(-1)], dim=0)
-
-        # edge_index in [2, E] format
-        edge_index = all_edges.t()
-
-        return compute_avg_within_group_unfairness(
-            edge_index, all_scores, social_groups, sens_attr
-        )
-
-
-class FairMarginLoss(FairnessAwareLoss):
-    """
-    Bias-Aware Contrastive Learning (Fair Margin Loss).
-    
-    Uses a dynamic margin in Hinge Loss that is larger for periphery nodes.
-    
-    L = max(0, gamma_uv - (pos_score - neg_score))
-    
-    gamma_uv = gamma_base * (1 + lambda * FairFactor)
-    FairFactor = 1 / log(Core(v) + e)   (Coreness inverse)
-    """
-    
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, margin=1.0):
-        super().__init__(base_loss_name, lambda_fair)
-        self.margin = margin
-        
-    def compute_base_loss(self, pos_out, neg_out, num_neg):
-        """
-        We OVERRIDE this because FairMargin works by modifying the margin inside the loss,
-        not by adding a separate penalty term.
-        So base_loss IS the total loss here.
-        """
-        # We perform the actual computation in compute_fairness_penalty to keep architecture consistent,
-        # OR we just return 0 here and do everything in fairness_penalty.
-        # Let's return 0 here and do full loss in fairness_penalty to access coreness.
-        return torch.tensor(0.0, device=pos_out.device)
-
-    def compute_fairness_penalty(self, pos_edge, neg_edge, pos_out, neg_out, coreness=None, **kwargs):
-        """
-        Computes the Margin Loss (technically not just a penalty, but the full loss).
-        
-        Args:
-            coreness: Tensor of coreness scores [num_nodes]
-        """
-        if coreness is None:
-             raise ValueError("coreness required for FairMarginLoss")
-             
-        # 1. Calculate FairFactor (Inverse Log Coreness) for Destination nodes
-        # We focus on the destination node (item) being recommended
-        # pos_edge: [batch, 2], pos_dst: [batch]
-        pos_dst = pos_edge[:, 1]
-        
-        # log(Core + e) -> +e ensures min value is > 1, so log is > 0
-        core_val = coreness[pos_dst].float()
-        fair_factor = 1.0 / torch.log(core_val + 2.71828)
-        
-        # 2. Calculate Dynamic Margin
-        # margin = base_margin * (1 + lambda * fair_factor)
-        # fair_factor is [batch].
-        dynamic_margin = self.margin * (1.0 + self.lambda_fair * fair_factor)
-        
-        # 3. Compute Hinge Loss
-        # Loss = max(0, margin - (pos - neg))
-        
-        # Flatten neg_out: [batch * num_neg]
-        neg_out = neg_out.view(-1)
-        
-        # Determine num_neg
-        num_neg = neg_out.size(0) // pos_out.size(0)
-        
-        # Repeat pos_out and dynamic_margin to match neg_out
-        # pos_out: [batch] -> [batch * num_neg]
-        pos_out_expanded = pos_out.repeat_interleave(num_neg)
-        dynamic_margin_expanded = dynamic_margin.repeat_interleave(num_neg)
-        
-        diff = pos_out_expanded - neg_out
-        
-        # dynamic_margin is now [batch * num_neg]
-        loss = torch.relu(dynamic_margin_expanded - diff)
-        
-        return loss.mean()
-        
-    def __call__(self, pos_out, neg_out, num_neg, pos_edge, neg_edge, **kwargs):
-        """
-        Override __call__ because we don't follow the `base + lambda*penalty` structure.
-        We returned 0 for base_loss, so we just return the result of compute_fairness_penalty.
-        """
-        # Check if coreness is passed
-        if 'coreness' not in kwargs:
-             # Fallback to standard loss if coreness missing (safety)
-             return super().compute_base_loss(pos_out, neg_out, num_neg), 0.0, 0.0
-             
-        loss = self.compute_fairness_penalty(pos_edge, neg_edge, pos_out, neg_out, **kwargs)
-        
-        # Return format: total_loss, base_loss_val, fairness_val
-        # We put everything in 'base_loss_val' for logging purposes, 
-        # or split it? Let's put it in total.
-        return loss, loss.item(), 0.0

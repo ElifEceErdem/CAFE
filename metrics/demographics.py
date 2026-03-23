@@ -194,34 +194,6 @@ def lambdas_computation_chunked(x_emb, y_emb, top_k, k_para, chunk_size=1024):
 
     return x_sorted_scores, y_sorted_idxs, x_corresponding
 
-def lambdas_computation_only_review(x_similarity, y_similarity, top_k, k_para):
-    max_num = 2000000
-    device = x_similarity.device
-
-    # Mask diagonals
-    rng = torch.arange(x_similarity.shape[0], device=device)
-    x_similarity[rng, rng] = max_num
-    y_similarity[rng, rng] = max_num
-
-    # Ranking
-    (x_sorted_scores, x_sorted_idxs) = x_similarity.sort(dim=1, descending=True)
-    (_, y_sorted_idxs) = y_similarity.sort(dim=1, descending=True)
-
-    length_of_k = k_para * top_k - 1
-
-    # We only care about top k of y
-    y_sorted_idxs = y_sorted_idxs[:, 1 :(length_of_k + 1)] # skip self (index 0)
-    x_sorted_scores = x_sorted_scores[:, 1 :(length_of_k + 1)]
-
-    x_corresponding = torch.zeros(x_similarity.shape[0], length_of_k, device=device)
-
-    # Gather x similarity scores corresponding to y's top neighbors
-    # Optimized gather
-    for i in range(x_corresponding.shape[0]):
-        x_corresponding[i, :] = x_similarity[i, y_sorted_idxs[i, :]]
-
-    return x_sorted_scores, y_sorted_idxs, x_corresponding
-
 def avg_ndcg(x_corresponding, x_similarity, x_sorted_scores, y_ranks, top_k):
     device = x_sorted_scores.device
     c = 2 * torch.ones_like(x_sorted_scores[:, :top_k], device=device)

@@ -62,7 +62,7 @@ def train_model(model, data, split_edge, args, patience=50):
                 pbar.set_postfix({
                     'loss': f'{loss:.4f}',
                     metric_name: f'{val_score:.4f}',
-                    'status': '✓ NEW BEST',
+                    'status': ' NEW BEST',
                     'best_epoch': best_epoch
                 })
             else:
@@ -79,7 +79,7 @@ def train_model(model, data, split_edge, args, patience=50):
                 pbar.close()
                 sys.stdout.write('\n')  # force newline after tqdm \r
                 sys.stdout.flush()
-                print(f"✓ Early stopping at epoch {epoch} (best: {best_epoch})", flush=True)
+                print(f" Early stopping at epoch {epoch} (best: {best_epoch})", flush=True)
                 break
     
     pbar.close()
@@ -92,8 +92,8 @@ def train_model(model, data, split_edge, args, patience=50):
         model.predictor.load_state_dict(best_state['predictor'])
         if best_state['emb'] and model.emb: 
             model.emb.load_state_dict(best_state['emb'])
-        print(f"✓ Loaded best model from epoch {best_epoch}", flush=True)
-        print(f"✓ Best validation {metric_name}: {best_val_score:.4f}", flush=True)
+        print(f" Loaded best model from epoch {best_epoch}", flush=True)
+        print(f" Best validation {metric_name}: {best_val_score:.4f}", flush=True)
     
     # If no validation happened (very short training), return None or reasonable defaults
     if best_all_results is None:

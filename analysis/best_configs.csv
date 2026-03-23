@@ -1,0 +1,78 @@
+Method,Dataset,lambda_fair,preproc_alpha,beta_ra,lambda_mobility
+CAFE-In,brightkite,0.05,,5.0,0.1
+CAFE-In,ego-facebook,0.3,,1.0,0.5
+CAFE-In,facebook,0.05,,0.1,0.5
+CAFE-In,oklahoma,0.3,,5.0,0.5
+CAFE-In,pokec_n,0.05,,1.0,0.1
+CAFE-In,unc,1.0,,5.0,0.5
+CAFE-Pre,brightkite,,0.3,2.0,0.5
+CAFE-Pre,ego-facebook,,0.05,0.5,0.3
+CAFE-Pre,facebook,,0.3,0.1,0.5
+CAFE-Pre,oklahoma,,1.0,0.5,0.5
+CAFE-Pre,pokec_n,,0.05,2.0,0.5
+CAFE-Pre,unc,,1.0,1.0,0.5
+CAFE-In-B,brightkite,0.1,,5.0,0.0
+CAFE-In-B,ego-facebook,0.3,,1.0,0.0
+CAFE-In-B,facebook,0.5,,0.5,0.0
+CAFE-In-B,oklahoma,0.1,,5.0,0.0
+CAFE-In-B,pokec_n,0.1,,0.5,0.0
+CAFE-In-B,unc,0.5,,5.0,0.0
+CAFE-Pre-B,brightkite,,0.3,2.0,0.0
+CAFE-Pre-B,ego-facebook,,1.0,0.1,0.0
+CAFE-Pre-B,facebook,,2.0,0.1,0.0
+CAFE-Pre-B,oklahoma,,0.5,5.0,0.0
+CAFE-Pre-B,pokec_n,,0.3,2.0,0.0
+CAFE-Pre-B,unc,,0.3,5.0,0.0
+CAFE-P,brightkite,,,1.0,0.5
+CAFE-P,ego-facebook,,,0.1,0.3
+CAFE-P,facebook,,,0.1,0.3
+CAFE-P,oklahoma,,,1.0,0.5
+CAFE-P,pokec_n,,,1.0,0.5
+CAFE-P,unc,,,2.0,0.5
+CI-In,brightkite,0.1,,,
+CI-In,ego-facebook,0.05,,,
+CI-In,facebook,0.3,,,
+CI-In,oklahoma,1.0,,,
+CI-In,pokec_n,0.1,,,
+CI-In,unc,0.05,,,
+CI-Pre,brightkite,0.1,,,
+CI-Pre,ego-facebook,1.0,,,
+CI-Pre,facebook,0.1,,,
+CI-Pre,oklahoma,1.0,,,
+CI-Pre,pokec_n,0.3,,,
+CI-Pre,unc,0.5,,,
+CI-Post,ego-facebook,,,,0.3
+CI-Post,facebook,,,,0.3
+CI-Post,oklahoma,,,,0.3
+CI-Post,unc,,,,0.3
+MB-Post,brightkite,,,,0.1
+MB-Post,ego-facebook,,,,0.1
+MB-Post,facebook,,,,0.1
+MB-Post,oklahoma,,,,0.3
+MB-Post,pokec_n,,,,0.1
+MB-Post,unc,,,,1.0
+MB-In,ego-facebook,0.01,,,
+MB-In,facebook,0.3,,,
+MB-In,oklahoma,0.3,,,
+MB-In,unc,0.1,,,
+MB-Pre,ego-facebook,2.0,,,
+MB-Pre,facebook,0.05,,,
+MB-Pre,oklahoma,2.0,,,
+MB-Pre,unc,1.0,,,
+HLGNN,brightkite,,,0.0,0.0
+HLGNN,ego-facebook,,,,
+HLGNN,facebook,,,,
+HLGNN,oklahoma,,,,
+HLGNN,pokec_n,,,0.0,0.0
+HLGNN,unc,,,,
+Cross-Link Bias,brightkite,,,,
+Cross-Link Bias,ego-facebook,,,,
+Cross-Link Bias,facebook,,,,
+Cross-Link Bias,oklahoma,,,,
+Cross-Link Bias,pokec_n,,,,
+Cross-Link Bias,pokec_z,,,,
+Cross-Link Bias,unc,,,,
+FairAdj,oklahoma,,,,
+FairAdj,pokec_n,,,,
+FairAdj,pokec_z,,,,
+FairAdj,unc,,,,

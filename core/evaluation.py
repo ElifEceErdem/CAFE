@@ -330,7 +330,7 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
                 if k in ndkl_results['ndkl_scores']:
                     results[f'NDKL@{k}'] = (0.0, ndkl_results['ndkl_scores'][k])
         
-        print("\n✓ Baseline metrics computed and stored")
+        print("\n Baseline metrics computed and stored")
         return results
 
 
@@ -719,198 +719,6 @@ def build_recommendations(h_emb, train_edges, eval_users, k, device, score_fn=No
         del scores  # Free memory
     
     return recs_by_u
-    
-def compute_fairness_metrics_with_pa(model, data, split_edge, args, baseline_results):
-    """
-    Compute fairness metrics using Dynamic PA re-ranking.
-    """
-    print("\n" + "="*80)
-    print(f"COMPUTING FAIRNESS METRICS (PA RE-RANKING)")
-    print(f"Lambda: {args.lambda_fair}")
-    print(f"PA Mode: {args.pa_mode}, Aggregation: {args.pa_agg}, T={args.pa_temperature}")
-    print("="*80)
-    
-    # Get configuration
-    use_pa_aware = getattr(args, 'use_pa_aware', False)
-    use_ndkl = getattr(args, 'use_ndkl', False)
-    ndkl_mode = getattr(args, 'ndkl_mode', 'per_user')
-    use_equality_gain = getattr(args, 'use_equality_gain', False)
-    use_stratified = getattr(args, 'use_stratified', False)
-    use_degree_plots = getattr(args, 'use_degree_plots', False)
-    use_centrality_gain = getattr(args, 'use_centrality_gain', False)
-    centrality_types = getattr(args, 'centrality_types', ['degree', 'katz', 'pagerank', 'eigenvector', 'closeness'])  # NEW
-    
-    model.encoder.eval()
-    model.predictor.eval()
-    
-    with torch.no_grad():
-        # Get embeddings
-        input_feat = model.create_input_feat(data)
-        h = model.encoder(input_feat, data.adj_t, data.edge_weight)
-        mean_h = torch.mean(h, dim=0, keepdim=True)
-        h_with_mean = torch.cat([h, mean_h], dim=0)
-        h_clean = h
-        
-        # Get edges and stored data
-        pos_test_edge = split_edge['test']['edge'].to(model.device)
-        neg_test_edge = split_edge['test']['edge_neg'].to(model.device)
-        train_edges = split_edge['train']['edge'].to(model.device)
-        
-        # Retrieve stored data from baseline
-        deg = baseline_results['_deg']
-        train_adj = baseline_results['_train_adj']
-        eval_users = baseline_results['_eval_users']
-        num_nodes = baseline_results['_num_nodes']
-        recs_baseline = baseline_results.get('_recs_baseline')
-        centrality_types = baseline_results.get('_centrality_types', centrality_types)  # NEW
-        
-        print(f"\nGenerating PA re-ranked recommendations for {len(eval_users)} users...")
-        
-        # Apply Dynamic PA re-ranking
-        from fairness_methods.reranking_pa import DynamicPAReRanker
-        
-        reranker = DynamicPAReRanker(
-            lambda_pa=args.lambda_fair,
-            accumulation_mode=args.pa_mode,
-            pa_aggregation=args.pa_agg,
-            temperature=args.pa_temperature
-        )
-        
-        # Generate PA re-ranked recommendations using trained predictor
-        score_fn = make_predictor_score_fn(model.predictor, predictor_type='two_arg')
-        recs_postprocessed = reranker.rerank_topk(
-            h_clean, train_edges, eval_users, k=100, degrees=deg,
-            score_fn=score_fn
-        )
-        
-        # Compute standard metrics
-        results = compute_metrics_from_recs(
-            recs_postprocessed, pos_test_edge, num_nodes, args.fairness_mode
-        )
-        
-        # Compute Hits@K and MRR
-        pos_test_pred = model.batch_predict(h_with_mean, pos_test_edge, args.batch_size)
-        neg_test_pred = model.batch_predict(h_with_mean, neg_test_edge.view(-1, 2), args.batch_size)
-        hits_mrr = compute_hits_mrr_from_scores(pos_test_pred, neg_test_pred)
-        results.update(hits_mrr)
-
-        # === Classification Metrics (AUC, F1, Accuracy) + Rawlsian Bias ===
-        cls_metrics = compute_classification_metrics(pos_test_pred, neg_test_pred)
-        results.update(cls_metrics)
-        rawls_bias = compute_rawlsian_degree_bias(
-            recs_postprocessed, pos_test_edge, deg, num_nodes, k=10
-        )
-        results['RawlsBias'] = (0.0, rawls_bias)
-
-        # === NEW: Equality Gain Metrics ===
-        if use_equality_gain:
-            eq_metrics = compute_equality_gain_metrics(
-                recs_postprocessed, train_edges, pos_test_edge, num_nodes,
-                k_values=[10, 20, 50, 100],
-                fairness_mode=args.fairness_mode
-            )
-            results.update(eq_metrics)
-
-
-        # === NEW: Centrality-based Equality Gain Metrics ===
-        if use_centrality_gain:
-            cent_metrics = compute_all_centrality_equality_gains(
-                recs_postprocessed, train_edges, pos_test_edge, num_nodes,
-                k_values=[10, 20, 50, 100],
-                centrality_types=centrality_types,
-                use_sampling_closeness=getattr(args, 'use_sampling_closeness', True)
-            )
-            results.update(cent_metrics)
-        
-        # === NEW: Stratified Metrics ===
-        if use_stratified:
-            strat_metrics = compute_stratified_metrics(
-                recs_postprocessed, train_edges, pos_test_edge, deg, num_nodes,
-                k=10,
-                low_percentile=20.0,
-                high_percentile=80.0,
-                fairness_mode=args.fairness_mode,
-                stratification_mode=args.stratification_mode
-            )
-            results.update(strat_metrics)
-        
-        # === NEW: Degree Analysis Plots ===
-        if use_degree_plots:
-            save_dir = getattr(args, 'plot_save_dir', 'plots')
-            degree_analysis = analyze_degree_effects(
-                recs_postprocessed, train_edges, pos_test_edge, deg, num_nodes,
-                k=10,
-                num_bins=10,
-                fairness_mode=args.fairness_mode,
-                save_dir=save_dir
-            )
-            results['_degree_analysis'] = degree_analysis
-        
-        # Compute PA-aware metrics if enabled
-        if use_pa_aware and recs_baseline is not None:
-            print("\n" + "="*60)
-            print(f"COMPUTING PA-AWARE METRICS (λ={args.lambda_fair})")
-            print("="*60)
-            
-            pa_results = compute_pa_fairness_from_overlap(
-                recs_baseline=recs_baseline,
-                recs_postprocessed=recs_postprocessed,
-                degrees=deg,
-                train_adj=train_adj,
-                test_nodes=eval_users,
-                num_nodes=num_nodes,
-                k_values=[10, 20, 50, 100],
-                normalization='auc'
-            )
-
-            results['PA_Bias_Score'] = (0.0, pa_results['pa_bias_reduction'])
-            results['PA_Fairness_Score'] = (0.0, pa_results['pa_fairness_score'])
-            results['PA_Overlap_Mean'] = (0.0, pa_results['mean_overlap_postproc'])
-        
-        # Compute NDKL metrics if enabled
-        if use_ndkl:
-            print("\n" + "="*60)
-            print(f"COMPUTING NDKL METRICS (λ={args.lambda_fair})")
-            print("="*60)
-            
-            node_categories = baseline_results.get('_node_categories')
-            target_dist = baseline_results.get('_target_dist')
-            
-            if node_categories is None or target_dist is None:
-                # Recompute if not available
-                from ndkl_helper import categorize_nodes_by_degree, compute_target_distribution
-                node_categories, _ = categorize_nodes_by_degree(deg, method='cumulative')
-                target_dist, _ = compute_target_distribution(train_edges, node_categories)
-            
-            ndkl_results = compute_ndkl_metrics(
-                recs_by_u=recs_postprocessed,
-                degrees=deg,
-                train_edges=train_edges,
-                h_emb=h_clean,
-                predictor=None,
-                device=model.device,
-                k_values=[10, 20, 50, 100],
-                ndkl_mode=ndkl_mode,
-                node_categories=node_categories,
-                target_dist=target_dist
-            )
-            
-            for k in [10, 20, 50, 100]:
-                if k in ndkl_results['ndkl_scores']:
-                    results[f'NDKL@{k}'] = (0.0, ndkl_results['ndkl_scores'][k])
-        
-
-        results['_recs_reranked'] = recs_postprocessed
-        results['_deg'] = deg
-        results['_train_adj'] = train_adj
-        results['_eval_users'] = eval_users
-        results['_num_nodes'] = num_nodes
-        results['_h_clean'] = h_clean
-        results['_train_edges'] = train_edges
-        results['_test_edges'] = pos_test_edge
-
-        return results
-
 
 def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseline_results):
     """
@@ -959,32 +767,15 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
         print(f"\nGenerating coreness-based recommendations for {len(eval_users)} users...")
         
         # Apply Reranking
-        reranking_method = getattr(args, 'reranking_method', 'coreness')
-        
-        if reranking_method == 'exposure':
-            from fairness_methods.reranking_exposure import ExposureReRanker
-            # lambda_exposure might be swept, so ensure it's a float
-            lambda_exposure = float(getattr(args, 'lambda_exposure', 0.1))
-            reranker = ExposureReRanker(lambda_exposure=lambda_exposure)
-            
-        else:
-            # Apply Coreness re-ranking
-            from fairness_methods.reranking_coreness import CorenessReRanker
-            
-            reranker = CorenessReRanker(
-                lambda_mobility=args.lambda_mobility,
-                lambda_bridge=args.lambda_bridge,
-                alpha=args.coreness_alpha,
-                core_threshold=getattr(args, 'core_threshold', None),
-                score_window=getattr(args, 'score_window', None),
-                use_adaptive=getattr(args, 'use_adaptive', False),
-                adaptive_threshold=getattr(args, 'adaptive_threshold', 0.3),
-                periphery_percentile=getattr(args, 'periphery_percentile', 0.25),
-                use_precision_aware=getattr(args, 'use_precision_aware', False),
-                score_gap_threshold=getattr(args, 'score_gap_threshold', 0.1),
-                boosting_mode=getattr(args, 'boosting_mode', 'continuous'),
-                reranking_approach=getattr(args, 'reranking_approach', 'boost')
-            )
+        from fairness_methods.reranking_coreness import CorenessReRanker
+
+        reranker = CorenessReRanker(
+            lambda_mobility=args.lambda_mobility,
+            lambda_bridge=args.lambda_bridge,
+            alpha=args.coreness_alpha,
+            boosting_mode=getattr(args, 'boosting_mode', 'continuous'),
+            reranking_approach=getattr(args, 'reranking_approach', 'boost')
+        )
         
         # Generate coreness re-ranked recommendations using trained predictor
         score_fn = make_predictor_score_fn(model.predictor, predictor_type='two_arg')

@@ -26,7 +26,6 @@ from core import (
 )
 from core.evaluation import compute_metrics_from_recs, compute_equality_gain_metrics, make_predictor_score_fn
 from backbone.model import BaseModel
-from fairness_methods.reranking_coreness import CorenessReRanker
 from metrics.centrality_equality_gain import compute_all_centrality_equality_gains
 from metrics.demographics import compute_demographic_metrics, compute_demographic_parity_ratio_change
 
@@ -330,42 +329,14 @@ def main():
                     )
                     res['Delta_DPR'] = dpr_change
                 
-                # Store
-                # We use combo_key as "lambda_..." for report compatibility?
-                # report tool expects 'lambda_X'.
-                # Let's assume we view Beta as the main sweeping variable for one plot,
-                # and Lambda as fixed?
-                # Let's store as `lambda_{beta}_mob_{lam}`
-                # Wait, plot tools parse "lambda_{float}".
-                # If we want to use existing tools, we might need to fake it.
-                # Or just save raw.
                 run_res[combo_key] = res
                 results_by_config[combo_key].append(res)
         
-        # Determine baseline (Beta=0, Lambda=0) metrics from run_res if exists, or calculate?
-        # We didn't run Beta=0 explicitly unless in list.
-        # Let's assume Beta=0, Lambda=0 is roughly Baseline.
-        # For robustness, let's populate 'baseline' key with GNN-only results.
-        # Re-calc GNN only? Or just trust the first run if appropriate.
-        # I'll add logic to calculate Pure GNN baseline once.
-        
-        # ... (Quick Baseline Calc)
-        # ...
-        # For now, let's just stick to run_res containing the experimental values.
-        
-        # FAKE BASELINE for report compatibility
-        # Just use the first result as baseline placeholder if needed, or pass empty.
-        # Actually, let's compute pure GNN metrics properly for comparison.
-        
         print("  Computing Pure GNN Baseline...")
-        # (Simplified GNN Eval Reuse)
-        # ... actually, let's skip for brevity and let the user see the combo numbers directly.
-        # We can treat `beta_0` as baseline if they pass it.
         run_res['baseline'] = {} # Empty baseline to satisfy schema
         
         all_results.append(run_res)
-
-    # Save
+        
     # Save
     if args.save_results:
         print("\nAggregating results across runs...")

@@ -670,13 +670,3 @@ def create_predictor_layer(hidden_channels, num_layers, dropout=0, predictor_nam
         return MLPPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
     elif predictor_name == 'MLPCAT':
         return MLPCatPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
-
-
-def adjust_lr(optimizer, decay_ratio, lr):
-    lr_ = lr * (1 - decay_ratio)
-    lr_min = lr * 0.0001
-    if lr_ < lr_min:
-        lr_ = lr_min
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr_
-    return lr_
