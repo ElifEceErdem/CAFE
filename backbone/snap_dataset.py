@@ -132,8 +132,6 @@ class SNAPDataset(InMemoryDataset):
         if os.path.exists(self.processed_paths[0]):
             print(f"Loading existing processed data from {self.processed_paths[0]}")
             return
-
-        
             
         if self.name == 'wiki-vote' or self.name == 'ego-facebook':
             # Process from raw txt file

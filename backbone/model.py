@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import math
 from torch.utils.data import DataLoader
 from layer import *

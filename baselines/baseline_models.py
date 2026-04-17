@@ -9,6 +9,7 @@ Implements various baseline methods:
 """
 
 import torch
+from torch.cuda import amp
 import torch.nn.functional as F
 import torch.utils.checkpoint as ckpt
 import numpy as np
@@ -31,6 +32,8 @@ from torch_geometric.nn.dense.linear import Linear
 from torch_geometric.nn.inits import glorot, zeros, reset
 from torch_geometric.typing import OptPairTensor, Adj, Size, OptTensor
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
+
+import time
 
 
 # ==================== HEURISTIC BASELINES ====================
@@ -297,8 +300,6 @@ class RandomWalkEmbedding:
 # ==================== GNN BASELINE ====================
 
 class PureGNN(torch.nn.Module):
-    """Pure GNN without HLGNN's advanced features - NOW WITH FAIRNESS SUPPORT"""
-
     def __init__(self, num_nodes, hidden_channels=256, num_layers=2,
                  dropout=0.3, gnn_type='gcn',
                  # Node feature parameters
@@ -357,7 +358,7 @@ class PureGNN(torch.nn.Module):
             torch.nn.Linear(hidden_channels, 1)
         )
         
-        # === NEW: Fairness Loss ===
+        # === Fairness Loss ===
         if fairness_method != 'none':
             # Import fairness losses
             import sys
@@ -368,20 +369,20 @@ class PureGNN(torch.nn.Module):
             
             from inprocessing import PAFairnessLoss, ExposureFairnessLoss, HybridFairnessLoss
             
-            if fairness_method == 'inproc_pa':
+            if fairness_method == 'inproc_pa': # Note: Tried for better results, didnt work 
                 self.fairness_loss = PAFairnessLoss(
                     base_loss_name='AUC',
                     lambda_fair=lambda_fair,
                     pa_aggregation=pa_aggregation
                 )
-            elif fairness_method == 'inproc_exposure':
+            elif fairness_method == 'inproc_exposure': # Note: Tried for better results, didnt work 
                 self.fairness_loss = ExposureFairnessLoss(
                     base_loss_name='AUC',
                     lambda_fair=lambda_fair,
                     num_nodes=num_nodes,
                     exposure_decay=exposure_decay
                 )
-            elif fairness_method == 'inproc_hybrid':
+            elif fairness_method == 'inproc_hybrid': # Note: Tried for better results, didnt work 
                 self.fairness_loss = HybridFairnessLoss(
                     base_loss_name='AUC',
                     lambda_fair=lambda_fair,
@@ -511,7 +512,6 @@ class SSNet(torch.nn.Module):
             if fairness_path not in sys.path:
                 sys.path.append(fairness_path)
             from inprocessing import PAFairnessLoss, ExposureFairnessLoss, HybridFairnessLoss
-            if fairness_method == 'inproc_pa':
                 self.fairness_loss = PAFairnessLoss(
                     base_loss_name='AUC', lambda_fair=lambda_fair, pa_aggregation=pa_aggregation)
             elif fairness_method == 'inproc_exposure':
@@ -905,14 +905,6 @@ class LGCConv(MessagePassing):
 
     def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
         return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from torch_geometric.nn.inits import glorot
-from torch_geometric.nn.conv import SAGEConv, GCNConv
-
-
 
 class TailSTEAK(nn.Module):
     def __init__(self, in_channels, hidden_channels, id_emb, num_etype, edge_channels, num_layers,
@@ -1281,10 +1273,7 @@ class TailSTEAK(nn.Module):
         else:
             n_id = torch.tensor(n_id, dtype=torch.int64).reshape(-1)
         return x[n_id]
-import time
-import torch
-from torch.cuda import amp
-import torch.nn.functional as F
+
 
 class TailSTEAKBaseline(nn.Module):
     def __init__(self, num_nodes, in_channels, hidden_channels=32, num_etype=1, edge_channels=32, num_layers=1,

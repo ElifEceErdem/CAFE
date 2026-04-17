@@ -51,7 +51,7 @@ PARETO_OBJECTIVES = [
     "Closeness_EG@10",
 ]
 
-# ASF weights (same as in pareto_hypervolume_analysis.py)
+# ASF weights 
 WEIGHTS = np.array([0.6, 0.3, 0.1, 0.1])
 
 # Display name mapping

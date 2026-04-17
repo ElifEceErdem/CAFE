@@ -23,7 +23,7 @@ def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sa
                 num_nodes=num_nodes,
                 num_samples=pos_edge.size(0),
                 num_neg=num_neg)
-        elif neg_sampler_name == 'coreness_aware':
+        elif neg_sampler_name == 'coreness_aware': # Note: Tried for better results, didnt work 
             # Coreness-aware negative sampling: sample negatives with probability ~ coreness
             # High-coreness (hub) nodes are more likely to be sampled as negatives
             # This forces the model to learn to distinguish between hubs and true positives
