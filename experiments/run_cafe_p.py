@@ -4,6 +4,8 @@ import argparse
 import torch
 import numpy as np
 import scipy.sparse as sp
+import json
+import traceback
 
 
 # Path setup
@@ -20,14 +22,16 @@ from metrics.coreness import compute_coreness
 
 from core import (
     set_seed, str2bool, load_dataset, train_model,
-    compute_statistics, compute_k_wise_statistics,
-    print_enhanced_results_table, print_k_wise_summary,
-    save_multi_lambda_results, create_experiment_info
+    compute_statistics, create_experiment_info
 )
 from core.evaluation import compute_metrics_from_recs, compute_equality_gain_metrics, make_predictor_score_fn
 from backbone.model import BaseModel
 from metrics.centrality_equality_gain import compute_all_centrality_equality_gains
 from metrics.demographics import compute_demographic_metrics, compute_demographic_parity_ratio_change
+
+import collections
+from core.data_loader import load_sensitive_attr
+from core.statistics import _serialize_stats
 
 def argument():
     parser = argparse.ArgumentParser(description='Hybrid RA-GNN Fairness Experiment')
@@ -95,7 +99,7 @@ def compute_ra_scores_sparse(adj_matrix):
     degrees[degrees == 0] = 1.0
     inv_deg = sp.diags(1.0 / degrees)
 
-    # A * D^-1 * A^T — result is sparse (only pairs with shared neighbors are nonzero)
+    # A * D^-1 * A^T -- result is sparse (only pairs with shared neighbors are nonzero)
     ra_matrix = (adj_matrix.dot(inv_deg)).dot(adj_matrix.T)
     ra_matrix = ra_matrix.tocsr()
 
@@ -125,7 +129,6 @@ def main():
     print("="*80)
     
     # Initialize aggregation containers
-    import collections
     results_by_config = collections.defaultdict(list)
     
     all_results = []
@@ -140,7 +143,6 @@ def main():
         pos_test_edge = split_edge['test']['edge'].to(device)
         
         # --- Load sensitive attributes ---
-        from core.data_loader import load_sensitive_attr
         sens_attr = None
         try:
             sens_attr = load_sensitive_attr(args.data_name, num_nodes, root=args.data_path)
@@ -206,8 +208,8 @@ def main():
         
         # --- Evaluate for each Beta/Lambda pair ---
         # Only evaluate test nodes: nodes appearing in test edges.
-        # This is methodologically correct: the control graph (train+test) only adds
-        # edges for test nodes, so the predicted graph should also only add recs for
+        # the control graph (train+test) only adds edges for test nodes, 
+        # so the predicted graph should also only add recs for
         # test nodes to ensure an apples-to-apples Equality Gain comparison.
         test_nodes = torch.unique(pos_test_edge.view(-1)).cpu().tolist()
         test_nodes_sorted = sorted(test_nodes)
@@ -264,7 +266,7 @@ def main():
 
                     # 2. Hybrid Score = GNN + beta * RA (sparse RA addition)
                     #    Only add nonzero RA entries instead of densifying the
-                    #    entire [B, N] RA matrix. Saves ~256MB per chunk.
+                    #    entire [B, N] RA matrix. 
                     hybrid_scores = gnn_scores  # safe to modify in-place (not reused)
                     if beta != 0:
                         ra_chunk_coo = ra_sparse[node_ids_np].tocoo()
@@ -280,7 +282,7 @@ def main():
                     # 4. Masking: self-loops + train neighbors (sparse)
                     self_cols = torch.tensor(chunk_node_ids, dtype=torch.long)
                     final_scores[torch.arange(B), self_cols] = float('-inf')
-                    #    Sparse neighbor mask — use nonzero indices directly
+                    #    Sparse neighbor mask -- use nonzero indices directly
                     #    instead of creating dense [B, N] matrix. Saves ~256MB per chunk.
                     adj_chunk = train_adj_csr[node_ids_np]
                     nb_r, nb_c = adj_chunk.nonzero()
@@ -348,8 +350,6 @@ def main():
             
         experiment_info = create_experiment_info(args, args.fairness_method)
         
-        from core.statistics import _serialize_stats
-        
         final_output = {
             'experiment_info': experiment_info,
             'baseline': {
@@ -378,8 +378,6 @@ def main():
                 return data
 
         final_output['individual_runs'] = strict_serialize(all_results)
-        
-        import json
         with open(args.results_file, 'w') as f:
             json.dump(final_output, f, indent=2)
         print(f"Aggregated results saved to {args.results_file}")
@@ -388,5 +386,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        import traceback
         traceback.print_exc()

@@ -20,6 +20,21 @@ from metrics.networked_inequality import (
     compute_within_group_unfairness_metric,
     validate_taylor_approximation
 )
+from fairness_methods.reranking import (
+            DiversityReRanker,
+            ProbabilisticMMRReRanker,
+            EnsembleMMRReRanker
+        )
+
+from fairness_methods.reranking_coreness import CorenessReRanker
+from ndkl_helper import categorize_nodes_by_degree, compute_target_distribution
+
+
+import numpy as np
+import scipy.sparse as sp
+from metrics.ndkl import categorize_nodes_by_degree, compute_target_distribution
+import sys
+from tqdm import tqdm
 
 
 def compute_hits_mrr_from_scores(pos_scores, neg_scores):
@@ -211,7 +226,7 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
                 print(f"Warning: Skipping Within-Group Unfairness "
                       f"(missing: {', '.join(missing)})")
 
-        # === NEW: Equality Gain Metrics ===
+        # === Equality Gain Metrics ===
         if getattr(args, 'use_equality_gain', False):
             eq_metrics = compute_equality_gain_metrics(
                 recs_baseline, train_edges, pos_test_edge, num_nodes,
@@ -390,13 +405,6 @@ def compute_fairness_metrics_with_advanced(model, data, split_edge, args, baseli
         
         print(f"\nGenerating recommendations for {len(eval_users)} users...")
         
-        # Apply re-ranking fairness method with ENHANCED SUPPORT
-        from fairness_methods.reranking import (
-            DiversityReRanker,
-            ProbabilisticMMRReRanker,
-            EnsembleMMRReRanker
-        )
-        
         # Determine which reranker to use
         if args.fairness_method == 'reranking_mmr':
             print(f"Using standard MMR with:")
@@ -496,7 +504,7 @@ def compute_fairness_metrics_with_advanced(model, data, split_edge, args, baseli
             ) 
             results.update(demo_metrics)
 
-        # === NEW: Equality Gain Metrics ===
+        # === Equality Gain Metrics ===
         if use_equality_gain:
             eq_metrics = compute_equality_gain_metrics(
                 recs_postprocessed, train_edges, pos_test_edge, num_nodes,
@@ -570,7 +578,6 @@ def compute_fairness_metrics_with_advanced(model, data, split_edge, args, baseli
             target_dist = baseline_results.get('_target_dist')
             
             if node_categories is None or target_dist is None:
-                from metrics.ndkl import categorize_nodes_by_degree, compute_target_distribution
                 node_categories, _ = categorize_nodes_by_degree(deg, method='cumulative')
                 target_dist, _ = compute_target_distribution(train_edges, node_categories)
             
@@ -614,7 +621,7 @@ def make_predictor_score_fn(predictor, predictor_type='two_arg', batch_cands=512
         predictor: The predictor module (e.g., MLPPredictor, nn.Sequential)
         predictor_type:
             'two_arg' for predictors called as predictor(x_i, x_j)
-                      (e.g., HLGNN's MLPPredictor: element-wise product → MLP)
+                      (e.g., HLGNN's MLPPredictor: element-wise product -> MLP)
             'concat'  for predictors called as predictor(cat(x_i, x_j))
                       (e.g., PureGNN's nn.Sequential)
         batch_cands: Number of candidates to process at once (controls memory)
@@ -662,11 +669,9 @@ def build_recommendations(h_emb, train_edges, eval_users, k, device, score_fn=No
         score_fn: Optional callable(h_sources [B,D], h_all [N,D]) -> [B,N] scores.
                   Created by make_predictor_score_fn(). If None, uses dot product.
     """
-    import numpy as np
     n = h_emb.size(0)
 
     # Build sparse mask matrix for training edges (CSR for fast row slicing)
-    import scipy.sparse as sp
     edges_cpu = train_edges.cpu().numpy()
     # Symmetric: both directions
     rows = np.concatenate([edges_cpu[0], edges_cpu[1]])
@@ -677,9 +682,6 @@ def build_recommendations(h_emb, train_edges, eval_users, k, device, score_fn=No
         (np.ones(len(rows), dtype=np.float32), (rows, cols)),
         shape=(n, n)
     )
-
-    import sys
-    from tqdm import tqdm
 
     recs_by_u = {}
     chunk_size = 64
@@ -766,8 +768,6 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
         
         print(f"\nGenerating coreness-based recommendations for {len(eval_users)} users...")
         
-        # Apply Reranking
-        from fairness_methods.reranking_coreness import CorenessReRanker
 
         reranker = CorenessReRanker(
             lambda_mobility=args.lambda_mobility,
@@ -803,7 +803,7 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
         )
         results['RawlsBias'] = (0.0, rawls_bias)
         
-        # === NEW: Equality Gain Metrics ===
+        # === Equality Gain Metrics ===
         if use_equality_gain:
             eq_metrics = compute_equality_gain_metrics(
                 recs_postprocessed, train_edges, pos_test_edge, num_nodes,
@@ -877,7 +877,6 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
             target_dist = baseline_results.get('_target_dist')
             
             if node_categories is None or target_dist is None:
-                from ndkl_helper import categorize_nodes_by_degree, compute_target_distribution
                 node_categories, _ = categorize_nodes_by_degree(deg, method='cumulative')
                 target_dist, _ = compute_target_distribution(train_edges, node_categories)
             

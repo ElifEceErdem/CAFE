@@ -16,6 +16,9 @@ import torch
 import numpy as np
 from scipy import stats
 from metrics.coreness import compute_coreness
+import scipy.sparse as sp
+import sys
+from tqdm import tqdm
 
 
 class CorenessReRanker:
@@ -80,7 +83,6 @@ class CorenessReRanker:
                 coreness_percentile = np.zeros_like(coreness_np)
 
         # Build sparse CSR mask for vectorized masking
-        import scipy.sparse as sp
         edges_cpu = train_edges.cpu().numpy()
         rows = np.concatenate([edges_cpu[0], edges_cpu[1]])
         cols = np.concatenate([edges_cpu[1], edges_cpu[0]])
@@ -92,9 +94,6 @@ class CorenessReRanker:
         )
 
         recs_by_u = {}
-
-        import sys
-        from tqdm import tqdm
         chunk_size = 1024
         scoring_method = "trained predictor" if score_fn is not None else "dot product"
         num_chunks = (len(test_nodes) + chunk_size - 1) // chunk_size

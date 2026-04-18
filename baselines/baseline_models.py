@@ -13,27 +13,26 @@ from torch.cuda import amp
 import torch.nn.functional as F
 import torch.utils.checkpoint as ckpt
 import numpy as np
-from torch_geometric.nn import GCNConv, SAGEConv, GATConv, GCNConv
+from torch_geometric.nn import GCNConv, SAGEConv, GCNConv
 from torch_geometric.nn.models import LightGCN
-from torch_geometric.utils import to_undirected, remove_self_loops, add_self_loops, softmax
-from sklearn.metrics.pairwise import cosine_similarity
-import networkx as nx
+from torch_geometric.utils import softmax
 from gensim.models import Word2Vec
 from tqdm import tqdm
 
 from typing import List, Optional
-from typing import Union, Tuple, Callable
+from typing import Union, Tuple
 import torch
 
 from torch import Tensor
 import torch.nn as nn
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.dense.linear import Linear
-from torch_geometric.nn.inits import glorot, zeros, reset
+from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.typing import OptPairTensor, Adj, Size, OptTensor
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
+from sklearn.metrics import roc_auc_score
 
-import time
+from inprocessing import PAFairnessLoss, ExposureFairnessLoss, HybridFairnessLoss
 
 
 # ==================== HEURISTIC BASELINES ====================
@@ -366,9 +365,7 @@ class PureGNN(torch.nn.Module):
             fairness_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../fairness_methods'))
             if fairness_path not in sys.path:
                 sys.path.append(fairness_path)
-            
-            from inprocessing import PAFairnessLoss, ExposureFairnessLoss, HybridFairnessLoss
-            
+                        
             if fairness_method == 'inproc_pa': # Note: Tried for better results, didnt work 
                 self.fairness_loss = PAFairnessLoss(
                     base_loss_name='AUC',
@@ -497,7 +494,7 @@ class SSNet(torch.nn.Module):
             self.emb = torch.nn.Embedding(num_nodes, hidden_channels)
             self.feat_proj = None
 
-        # Self-rescaling MLP (2-layer, matches original default)
+        # Self-rescaling MLP (2-layer)
         self.mlp_scalar = torch.nn.Sequential(
             torch.nn.Linear(hidden_channels, hidden_channels // 2),
             torch.nn.Tanh(),
@@ -511,7 +508,6 @@ class SSNet(torch.nn.Module):
             fairness_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../fairness_methods'))
             if fairness_path not in sys.path:
                 sys.path.append(fairness_path)
-            from inprocessing import PAFairnessLoss, ExposureFairnessLoss, HybridFairnessLoss
                 self.fairness_loss = PAFairnessLoss(
                     base_loss_name='AUC', lambda_fair=lambda_fair, pa_aggregation=pa_aggregation)
             elif fairness_method == 'inproc_exposure':
@@ -550,7 +546,6 @@ class SSNet(torch.nn.Module):
     def _compute_lightgcn_adj(self, edge_index, num_nodes):
         """Compute symmetric normalized adjacency: weight = 1/sqrt(d_u * d_v).
 
-        Matches original SSNet: gnn_module.add_edge_weights_to_graph()
         """
         row, col = edge_index[0], edge_index[1]
         deg = torch.zeros(num_nodes, device=edge_index.device)
@@ -1385,7 +1380,6 @@ class TailSTEAKBaseline(nn.Module):
                     h = self.model.embed(full_edge_index, torch.arange(self.num_nodes, device=device), None)
                     pos_scores = (h[val_pos_edges[:, 0]] * h[val_pos_edges[:, 1]]).sum(dim=-1)
                     neg_scores = (h[val_neg_edges[:, 0]] * h[val_neg_edges[:, 1]]).sum(dim=-1)
-                    from sklearn.metrics import roc_auc_score
                     labels = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(neg_scores)]).cpu().numpy()
                     preds = torch.cat([pos_scores, neg_scores]).cpu().numpy()
                     auc = roc_auc_score(labels, preds)
@@ -1526,7 +1520,6 @@ class TailSTEAKBaseline(nn.Module):
                 h = self.model.embed(edge_index, torch.arange(self.num_nodes, device=device), None)
                 pos_scores = (h[val_pos_edges[:, 0]] * h[val_pos_edges[:, 1]]).sum(dim=-1)
                 neg_scores = (h[val_neg_edges[:, 0]] * h[val_neg_edges[:, 1]]).sum(dim=-1)
-                from sklearn.metrics import roc_auc_score
                 labels = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(neg_scores)]).cpu().numpy()
                 preds = torch.cat([pos_scores, neg_scores]).cpu().numpy()
                 auc = roc_auc_score(labels, preds)

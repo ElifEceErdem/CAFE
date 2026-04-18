@@ -7,25 +7,26 @@ ranking aggregation (Algorithm 1, Appendix F).
 Core pipeline (matching /var/scratch/eerdem/MORAL/main.py):
   1. Train per-group encoder/predictor pairs via MORAL.fit()
   2. Score all test edges via MORAL.predict()
-  3. Compute target distribution π from training graph edge-type proportions
-  4. Generate position→group assignments via greedy DKL minimisation
+  3. Compute target distribution phi from training graph edge-type proportions
+  4. Generate position->group assignments via greedy DKL minimisation
   5. For each group, sort test edges by score (descending)
   6. Interleave top edges into the final ranking by position assignments
 
-Naming convention (per user request):
+Naming convention:
   - NDKL   = sensitive-attribute-based NDKL (core, used for reranking)
   - deg_NDKL = degree-based NDKL (secondary metric, kept for reporting)
 """
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
+from baselines.fairness_aware_baseline_models import train_moral
+from core.evaluation import compute_hits_mrr_from_scores
+from metrics.precision import compute_metrics_from_recs
 
 
 # ─────────────────────────────────────────────────────────────────────
 # Greedy KL-divergence position assignment (Algorithm 1)
-# Ported from /var/scratch/eerdem/MORAL/main.py:27-43
 # ─────────────────────────────────────────────────────────────────────
 
 def generate_array_greedy_dkl(n: int, distribution: np.ndarray) -> torch.Tensor:
@@ -62,19 +63,18 @@ def generate_array_greedy_dkl(n: int, distribution: np.ndarray) -> torch.Tensor:
 
 # ─────────────────────────────────────────────────────────────────────
 # Target distribution from training graph
-# Ported from /var/scratch/eerdem/MORAL/main.py:135-138
 # ─────────────────────────────────────────────────────────────────────
 
-_NUM_SENS_GROUPS = 3  # sens[u]+sens[v] ∈ {0, 1, 2}
+_NUM_SENS_GROUPS = 3  # sens[u]+sens[v] 
 
 
 def compute_sens_target_distribution(
     edge_index: torch.Tensor,
     sens: torch.Tensor,
 ) -> np.ndarray:
-    """Compute π — the proportion of each edge-type in the training graph.
+    """Compute phi -- the proportion of each edge-type in the training graph.
 
-    Edge type = sens[src] + sens[dst]  ∈ {0, 1, 2}.
+    Edge type = sens[src] + sens[dst]  
 
     Args:
         edge_index: [2, E] training edge index
@@ -142,9 +142,8 @@ def greedy_kl_rerank(
         group_labels = test_labels[group_mask][indices]
 
         n_fill = min(int(pos_mask.sum()), len(group_scores))
-        # Use explicit index assignment — chained indexing
+        # Use explicit index assignment -- chained indexing
         # (tensor[bool_mask][:n] = ...) writes to a copy, not the original.
-        # Matches original main.py:164-165 which uses direct bool assignment.
         pos_indices = torch.where(pos_mask)[0][:n_fill]
         final_scores[pos_indices] = group_scores[:n_fill]
         final_labels[pos_indices] = group_labels[:n_fill]
@@ -169,8 +168,8 @@ def compute_sens_ndkl(
     pi: np.ndarray,
     k_values: list = None,
 ) -> Dict[str, float]:
-    """Compute NDKL — the normalised discounted KL divergence between
-    the prefix-distribution of edge groups in a ranking and the target π.
+    """Compute NDKL -- the normalised discounted KL divergence between
+    the prefix-distribution of edge groups in a ranking and the target phi.
 
     This is the sens-attr-based version (the paper's core metric).
 
@@ -231,9 +230,6 @@ def compute_moral_metrics(base_model, data, split_edge, args):
       - deg_NDKL@K (degree-based, secondary)
       - Precision@K, Distribution_Fairness@K (from per-user recs)
     """
-    from baselines.fairness_aware_baseline_models import MORAL, train_moral
-    from core.evaluation import compute_hits_mrr_from_scores
-
     print("\n" + "=" * 80)
     print("COMPUTING MORAL METRICS")
     print("=" * 80)
@@ -267,12 +263,12 @@ def compute_moral_metrics(base_model, data, split_edge, args):
     # ------------------------------------------------------------------
     print("[MORAL] Computing greedy KL-divergence reranking...")
 
-    # Build edge index for π computation
+    # Build edge index for phi computation
     train_edge_index = data.edge_index   # [2, E_train]
     sens = moral.sens_cpu
 
     pi = compute_sens_target_distribution(train_edge_index, sens)
-    print(f"  Target distribution π = {pi}")
+    print(f"  Target distribution phi = {pi}")
 
     # Get all test edges + labels + scores
     all_test_outputs = moral.predict().cpu()  # uses stored test edges
@@ -292,7 +288,7 @@ def compute_moral_metrics(base_model, data, split_edge, args):
     )
 
     # ------------------------------------------------------------------
-    # 4. NDKL (sens-based → "NDKL")
+    # 4. NDKL (sens-based -> "NDKL")
     # ------------------------------------------------------------------
     # Build the reranked edge list for NDKL measurement
     # Sort all test edges by the reranked order
@@ -335,7 +331,6 @@ def compute_moral_metrics(base_model, data, split_edge, args):
     # ------------------------------------------------------------------
     # 6. Precision@K, Distribution_Fairness@K (from per-user recs)
     # ------------------------------------------------------------------
-    from metrics.precision import compute_metrics_from_recs
     fairness_mode = getattr(args, 'fairness_mode', 'indegree')
     rec_results = compute_metrics_from_recs(
         recs_by_u, pos_test_edge.cpu(), num_nodes, fairness_mode
@@ -343,7 +338,7 @@ def compute_moral_metrics(base_model, data, split_edge, args):
     results.update(rec_results)
 
     # ------------------------------------------------------------------
-    # 7. deg_NDKL (degree-based, secondary — reuses recs_by_u)
+    # 7. deg_NDKL (degree-based, secondary -- reuses recs_by_u)
     # ------------------------------------------------------------------
     try:
         from ndkl_helper import (
@@ -383,7 +378,7 @@ def compute_moral_metrics(base_model, data, split_edge, args):
             print(f"  Degree-based NDKL: {deg_ndkl_results.get('ndkl_scores', {})}")
 
     except ImportError:
-        print("  [MORAL] ndkl_helper not available — skipping deg_NDKL")
+        print("  [MORAL] ndkl_helper not available -- skipping deg_NDKL")
 
-    print("\n✓ MORAL metrics computed")
+    print("\n MORAL metrics computed")
     return results

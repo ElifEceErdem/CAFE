@@ -1,10 +1,11 @@
-from typing import Dict, List, Optional
 import torch
 import sys
 import random
 from collections import defaultdict
 from tqdm import tqdm
-import os
+import numpy as np
+import scipy.sparse as sp
+from core.data_loader import build_train_adjacency
 
 
 class DiversityReRanker:
@@ -49,8 +50,6 @@ class DiversityReRanker:
         Returns:
             recs_by_u: dict mapping node_id -> list of top-k recommended nodes
         """
-        import numpy as np
-        import scipy.sparse as sp
         device = h.device
         n = h.size(0)
 
@@ -74,7 +73,6 @@ class DiversityReRanker:
 
     def _build_adjacency(self, train_edges, n):
         """Build adjacency list from training edges (vectorized)."""
-        from core.data_loader import build_train_adjacency
         return build_train_adjacency(train_edges, n)
     
     def _rerank_mmr(self, h, train_adj, test_nodes, k, score_fn=None):
@@ -92,14 +90,14 @@ class DiversityReRanker:
         test_nodes_list = list(test_nodes)
         if self.shuffle_users:
             random.shuffle(test_nodes_list)
-            print(f"🔀 Shuffled test nodes to remove early-user advantage")
+            print(f"Shuffled test nodes to remove early-user advantage")
         
         # Process in chunks to avoid OOM
         chunk_size = 1024
         num_chunks = (len(test_nodes_list) + chunk_size - 1) // chunk_size
         
         scoring_method = "trained predictor" if score_fn is not None else "dot product"
-        print(f"\n📄 MMR Re-ranking: Processing {len(test_nodes_list)} nodes in {num_chunks} chunks...")
+        print(f"\n MMR Re-ranking: Processing {len(test_nodes_list)} nodes in {num_chunks} chunks...")
         print(f"   Exposure scaling: {self.exposure_scale}")
         print(f"   Penalty mode: {self.penalty_mode}")
         print(f"   Scoring: {scoring_method}")
@@ -108,8 +106,6 @@ class DiversityReRanker:
         chunk_iterator = range(0, len(test_nodes_list), chunk_size)
         pbar = tqdm(chunk_iterator, desc="MMR Re-ranking", unit="chunk", 
                    total=num_chunks)
-        
-        import numpy as np
         for chunk_start in pbar:
             chunk_end = min(chunk_start + chunk_size, len(test_nodes_list))
             chunk_test_nodes = test_nodes_list[chunk_start:chunk_end]
@@ -193,7 +189,7 @@ class DiversityReRanker:
             })
         
         pbar.close()
-        print(f"✅ MMR Re-ranking complete. Generated {len(recs_by_u)} recommendation lists")
+        print(f"   MMR Re-ranking complete. Generated {len(recs_by_u)} recommendation lists")
         print(f"   Final exposure stats: max={exposure.max():.0f}, "
               f"mean={exposure.mean():.1f}, std={exposure.std():.1f}")
         
@@ -219,14 +215,14 @@ class DiversityReRanker:
         test_nodes_list = list(test_nodes)
         if self.shuffle_users:
             random.shuffle(test_nodes_list)
-            print(f"🔀 Shuffled test nodes to remove early-user advantage")
+            print(f"Shuffled test nodes to remove early-user advantage")
         
         # Process in chunks
         chunk_size = 1024
         num_chunks = (len(test_nodes_list) + chunk_size - 1) // chunk_size
         
         scoring_method = "trained predictor" if score_fn is not None else "dot product"
-        print(f"\n📄 Exposure Re-ranking: Processing {len(test_nodes_list)} nodes in {num_chunks} chunks...")
+        print(f"\n Exposure Re-ranking: Processing {len(test_nodes_list)} nodes in {num_chunks} chunks...")
         print(f"   Exposure cap: {self.exposure_cap} recommendations per node")
         print(f"   Scoring: {scoring_method}")
         
@@ -234,8 +230,6 @@ class DiversityReRanker:
         chunk_iterator = range(0, len(test_nodes_list), chunk_size)
         pbar = tqdm(chunk_iterator, desc="Exposure Re-ranking", unit="chunk",
                    total=num_chunks)
-        
-        import numpy as np
         for chunk_start in pbar:
             chunk_end = min(chunk_start + chunk_size, len(test_nodes_list))
             chunk_test_nodes = test_nodes_list[chunk_start:chunk_end]
@@ -282,7 +276,7 @@ class DiversityReRanker:
             })
         
         pbar.close()
-        print(f"✅ Exposure Re-ranking complete. Generated {len(recs_by_u)} recommendation lists")
+        print(f"Exposure Re-ranking complete. Generated {len(recs_by_u)} recommendation lists")
         
         return recs_by_u
 
@@ -310,8 +304,6 @@ class ProbabilisticMMRReRanker:
         train_adj = self._build_adjacency(train_edges, n)
         exposure = torch.zeros(n, device='cpu')
         recs_by_u = {}
-        
-        from tqdm import tqdm
         chunk_size = 1024
         scoring_method = "trained predictor" if score_fn is not None else "dot product"
         num_chunks = (len(test_nodes) + chunk_size - 1) // chunk_size

@@ -1,7 +1,7 @@
 import os
 import requests
 import zipfile
-import io
+import gdown
 
 def download_and_extract(url: str, dest_dir: str, zip_filename: str):
     """
@@ -10,13 +10,12 @@ def download_and_extract(url: str, dest_dir: str, zip_filename: str):
     os.makedirs(dest_dir, exist_ok=True)
     zip_path = os.path.join(dest_dir, zip_filename)
     
-    # Simple redirect handling for Google Drive links (works for smaller files)
+    # Simple redirect handling for Google Drive links
     print(f"Downloading from {url}...")
     try:
-        import gdown
         gdown.download(url, zip_path, quiet=False)
     except ImportError:
-        print("gdown not installed. Using requests (might fail for large GDrive files)...")
+        print("gdown not installed")
         r = requests.get(url)
         assert r.status_code == 200, f"Failed to download. Status code: {r.status_code}"
         with open(zip_path, "wb") as f:
@@ -29,8 +28,7 @@ def download_and_extract(url: str, dest_dir: str, zip_filename: str):
     print(f"Successfully extracted to {dest_dir}\n")
 
 if __name__ == "__main__":
-    # Target directory specified by the user
-    target_dir = "/home/eerdem/workspace/HL-GNN/data/SNAP"
+    target_dir = os.path.dirname(os.path.abspath(__file__))
     
     print(f"--- Downloading Oklahoma97 Dataset ---")
     okla_url = "https://drive.google.com/u/0/uc?id=1tNcxgtEQX3dtDKqwDMswJEvxpKBpov75&export=download"

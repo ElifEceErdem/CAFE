@@ -1,7 +1,5 @@
-# fairness_experiments_scaffold/core/training.py
 import copy
 import sys
-import torch
 from tqdm import tqdm
 from backbone.snap_evaluator import SNAPEvaluator
 
@@ -77,13 +75,13 @@ def train_model(model, data, split_edge, args, patience=50):
             # Early stopping check
             if patience_counter >= patience:
                 pbar.close()
-                sys.stdout.write('\n')  # force newline after tqdm \r
+                sys.stdout.write('\n')  
                 sys.stdout.flush()
                 print(f" Early stopping at epoch {epoch} (best: {best_epoch})", flush=True)
                 break
     
     pbar.close()
-    sys.stdout.write('\n')  # force newline after tqdm \r
+    sys.stdout.write('\n')  
     sys.stdout.flush()
     
     # Load best model

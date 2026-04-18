@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.utils import to_undirected
-from sklearn.model_selection import train_test_split
 from torch_geometric.utils import negative_sampling
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
@@ -107,10 +106,8 @@ class SNAPDataset(InMemoryDataset):
             val = getattr(data, attr, None)
             if val is not None and torch.is_tensor(val) and val.dim() >= 1:
                 if val.shape[0] > num_nodes_re:
-                    # Attribute was NOT reindexed in a previous run — reindex now
                     setattr(clean, attr, val[unique_nodes])
                 elif val.shape[0] == num_nodes_re:
-                    # Already correct size
                     setattr(clean, attr, val)
 
         # Collate and overwrite processed/data.pt
@@ -173,7 +170,7 @@ class SNAPDataset(InMemoryDataset):
                 features_dict = json.load(f)
             
             # Determine dimensions
-            num_nodes = len(features_dict) # Based on observations, 7624
+            num_nodes = len(features_dict) 
             # Find max feature index for dimension size (sparse -> dense multi-hot)
             max_feat_idx = 0
             for n_id, feats in features_dict.items():

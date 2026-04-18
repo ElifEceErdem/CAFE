@@ -6,13 +6,14 @@ Degree-based Analysis and Plotting
 Analyzes precision and equality gain as a function of node degree.
 Now supports comparison plots across multiple methods.
 """
-
+import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple
 from collections import defaultdict
-from metrics.equality_gain import compute_equality_gain
+from metrics.equality_gain import compute_equality_gain, compute_gini_coefficient
+import matplotlib.pyplot as plt
 
 
 def compute_equality_gain_vs_degree_by_source(
@@ -113,8 +114,6 @@ def compute_equality_gain_vs_degree_by_target(
     Returns:
         (bin_centers, equality_gains)
     """
-    from metrics.equality_gain import compute_gini_coefficient
-    
     degrees_np = degrees.cpu().numpy()
     deg_min, deg_max = degrees_np.min(), degrees_np.max()
     
@@ -173,90 +172,6 @@ def compute_equality_gain_vs_degree_by_target(
     return np.array(bin_centers), np.array(bin_eq_gains)
 
 
-def analyze_degree_effects(
-    recs_by_u: Dict[int, List[int]],
-    train_edges: torch.Tensor,
-    test_edges: torch.Tensor,
-    degrees: torch.Tensor,
-    num_nodes: int,
-    k: int = 10,
-    num_bins: int = 10,
-    fairness_mode: str = 'indegree',
-    stratification_mode: str = 'source',  # NEW PARAMETER
-    save_dir: str = None
-) -> Dict[str, np.ndarray]:
-    """
-    Single-method degree-based analysis.
-    
-    Args:
-        recs_by_u: Recommendations
-        train_edges: Training edges
-        test_edges: Test edges
-        degrees: Node degrees
-        num_nodes: Total number of nodes
-        k: Cutoff value
-        num_bins: Number of degree bins
-        fairness_mode: Degree counting mode
-        stratification_mode: 'source', 'target', or 'mixed' (default: 'source')
-        save_dir: Directory to save plots (optional)
-    
-    Returns:
-        dict with analysis results
-    """
-    print("\n" + "="*80)
-    print(f"DEGREE-BASED ANALYSIS @ K={k} (Mode: {stratification_mode.upper()})")
-    print("="*80)
-    
-    # Compute precision vs degree (always by SOURCE)
-    print("\nComputing Precision vs Degree (by SOURCE)...")
-    bin_centers_prec, mean_prec, std_prec = compute_precision_vs_degree(
-        recs_by_u, test_edges, degrees, k, num_bins
-    )
-    
-    # Compute equality gain vs degree based on mode
-    print(f"Computing Equality Gain vs Degree (by {stratification_mode.upper()})...")
-    if stratification_mode == 'source':
-        bin_centers_eq, eq_gains = compute_equality_gain_vs_degree_by_source(
-            recs_by_u, train_edges, test_edges, degrees, num_nodes,
-            k, num_bins, fairness_mode
-        )
-    elif stratification_mode == 'target':
-        bin_centers_eq, eq_gains = compute_equality_gain_vs_degree_by_target(
-            recs_by_u, train_edges, test_edges, degrees, num_nodes,
-            k, num_bins, fairness_mode
-        )
-    elif stratification_mode == 'mixed':
-        bin_centers_eq, eq_gains = compute_equality_gain_vs_degree(
-            recs_by_u, train_edges, test_edges, degrees, num_nodes,
-            k, num_bins, fairness_mode
-        )
-    else:
-        raise ValueError(f"Invalid stratification_mode: {stratification_mode}")
-    
-    # Print summary
-    print("\n" + "-"*80)
-    print("PRECISION vs DEGREE (by SOURCE):")
-    print("-"*80)
-    for deg, prec, std in zip(bin_centers_prec, mean_prec, std_prec):
-        print(f"  Degree ~{deg:>6.1f}: Precision = {prec*100:>6.2f}% ± {std*100:>5.2f}%")
-    
-    print("\n" + "-"*80)
-    print(f"EQUALITY GAIN vs DEGREE (by {stratification_mode.upper()}):")
-    print("-"*80)
-    for deg, eq in zip(bin_centers_eq, eq_gains):
-        print(f"  Degree ~{deg:>6.1f}: Equality Gain = {eq:>7.2f}%")
-    print("="*80)
-    
-    return {
-        'precision_bin_centers': bin_centers_prec,
-        'precision_mean': mean_prec,
-        'precision_std': std_prec,
-        'equality_gain_bin_centers': bin_centers_eq,
-        'equality_gains': eq_gains,
-        'stratification_mode': stratification_mode
-    }
-
-
 def analyze_degree_effects_comparison(
     all_recs: Dict[str, Dict[int, List[int]]],
     train_edges: torch.Tensor,
@@ -266,7 +181,7 @@ def analyze_degree_effects_comparison(
     k: int = 10,
     num_bins: int = 10,
     fairness_mode: str = 'indegree',
-    stratification_mode: str = 'source',  # NEW PARAMETER
+    stratification_mode: str = 'source', 
     save_dir: str = None
 ) -> Dict[str, Dict]:
     """
@@ -342,7 +257,6 @@ def analyze_degree_effects_comparison(
     
     # Generate comparison plots
     if save_dir:
-        import os
         os.makedirs(save_dir, exist_ok=True)
         prec_path = os.path.join(save_dir, f'precision_vs_degree_comparison_k{k}_{stratification_mode}.png')
         eq_path = os.path.join(save_dir, f'equality_gain_vs_degree_comparison_k{k}_{stratification_mode}.png')
@@ -592,8 +506,6 @@ def plot_single_method_degree_analysis(
     save_dir
 ):
     """Helper to plot single-method analysis."""
-    import os
-    import matplotlib.pyplot as plt
     os.makedirs(save_dir, exist_ok=True)
     
     # 1. Precision Plot
@@ -636,8 +548,6 @@ def plot_aggregated_degree_analysis(
     """
     Plot Aggregated Degree Analysis (Mean +/- Std across runs).
     """
-    import os
-    import matplotlib.pyplot as plt
     os.makedirs(save_dir, exist_ok=True)
     
     # --- Helper to aggregate ---

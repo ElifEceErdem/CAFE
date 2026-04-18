@@ -1,7 +1,6 @@
 import torch
-import numpy as np
 from negative_sample import global_neg_sample, global_perm_neg_sample, local_neg_sample
-
+import networkx as nx
 
 def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sampler_name=None, num_neg=None):
     if 'edge' in split_edge['train']:
@@ -29,9 +28,6 @@ def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sa
             # This forces the model to learn to distinguish between hubs and true positives
             
             # Compute coreness using k-core decomposition
-            from torch_geometric.utils import k_hop_subgraph
-            import networkx as nx
-            
             # Build NetworkX graph for k-core
             G = nx.Graph()
             G.add_nodes_from(range(num_nodes))

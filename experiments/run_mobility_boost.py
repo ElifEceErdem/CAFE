@@ -37,6 +37,7 @@ from core import (
     save_multi_lambda_results
 )
 from core.evaluation import compute_baseline_metrics, compute_fairness_metrics_with_coreness
+from metrics.degree_analysis import plot_aggregated_degree_analysis
 from backbone.model import BaseModel
 
 
@@ -306,8 +307,6 @@ def main():
     # Generate Aggregated Plots
     if args.use_degree_plots and args.runs > 1:
         print(f"\nGenerating Aggregated Degree Analysis Plots (Mean +/- Std)...")
-        from metrics.degree_analysis import plot_aggregated_degree_analysis
-
         save_dir = getattr(args, 'plot_save_dir', 'plots')
 
         for key, da_list in degree_analysis_collector.items():

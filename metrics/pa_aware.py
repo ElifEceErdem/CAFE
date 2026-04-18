@@ -7,6 +7,8 @@ recommendations with PA-based recommendations.
 
 import torch
 import numpy as np
+import scipy.sparse as sp
+from tqdm import tqdm
 
 
 def generate_pa_recommendations(degrees, train_adj, test_nodes, k, num_nodes):
@@ -23,14 +25,11 @@ def generate_pa_recommendations(degrees, train_adj, test_nodes, k, num_nodes):
     Returns:
         dict: {node_id -> list of top-k nodes by PA score}
     """
-    import scipy.sparse as sp
     degrees_cpu = degrees.cpu().float()
     recs_pa = {}
 
     # Build sparse CSR mask if train_adj is a list (legacy format)
     if isinstance(train_adj, list):
-        import numpy as np
-        from core.data_loader import build_train_adjacency
         # Convert list-of-sets to CSR - need original edges
         # Build CSR from list-of-sets directly
         rows_list, cols_list = [], []
@@ -49,7 +48,6 @@ def generate_pa_recommendations(degrees, train_adj, test_nodes, k, num_nodes):
     else:
         train_mask_csr = train_adj  # Already CSR
 
-    from tqdm import tqdm
     chunk_size = 1024
     num_chunks = (len(test_nodes) + chunk_size - 1) // chunk_size
 
@@ -64,7 +62,6 @@ def generate_pa_recommendations(degrees, train_adj, test_nodes, k, num_nodes):
         chunk_pa_scores = degrees_cpu[chunk_tensor].unsqueeze(1) * degrees_cpu.unsqueeze(0)  # [chunk, N]
 
         # Vectorized masking
-        import numpy as np
         chunk_arr = np.array(chunk_nodes)
         chunk_pa_scores[range(len(chunk_nodes)), chunk_arr] = float('-inf')
         mask_block = train_mask_csr[chunk_arr]

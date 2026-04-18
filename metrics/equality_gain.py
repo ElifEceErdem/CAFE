@@ -6,7 +6,6 @@ predicted vs control (observed) graphs.
 """
 
 import torch
-import numpy as np
 from typing import Dict, List, Tuple
 
 
@@ -73,7 +72,7 @@ def build_predicted_degree_distribution(
     # Training edge degrees (vectorized)
     degrees = _vectorized_degree_count(train_edges, num_nodes, mode)
 
-    # Recommendation edges — build tensor then vectorize
+    # Recommendation edges -- build tensor then vectorize
     rec_src, rec_dst = [], []
     for u, vs in recs_by_u.items():
         topk = vs[:k]

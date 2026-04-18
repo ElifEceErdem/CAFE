@@ -19,6 +19,7 @@ import os
 import sys
 import argparse
 import torch
+import traceback
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -34,6 +35,7 @@ from core import (
     print_enhanced_results_table, print_k_wise_summary,
     save_multi_lambda_results, train_inprocessing_model
 )
+from metrics.coreness import compute_coreness
 from fairness_methods.inprocessing import FairnessAwareModel, apply_coreness_inverse_aggregation, apply_mobility_boost_aggregation
 from metrics.degree_analysis import analyze_degree_effects_comparison
 
@@ -234,9 +236,6 @@ def main():
              if hasattr(data, 'coreness'):
                  coreness = data.coreness
              else:
-                 # Lazy import to avoid circular dependency
-                 from metrics.coreness import compute_coreness
-
                  print("Computing coreness for fairness methods (using iterative H-index)...")
                  # compute_coreness expects [num_edges, 2]
                  coreness = compute_coreness(data.edge_index.t(), num_nodes)
@@ -482,7 +481,6 @@ def main():
                 print("\n Note: Recommendations not available for degree comparison plots")
         except Exception as e:
             print(f"\n Warning: Could not generate degree comparison plots: {e}")
-            import traceback
             traceback.print_exc()
 
 

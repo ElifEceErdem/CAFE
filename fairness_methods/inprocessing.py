@@ -1,4 +1,3 @@
-from typing import Tuple, Dict, Any
 import torch
 
 try:
@@ -71,7 +70,7 @@ class PAFairnessLoss(FairnessAwareLoss):
     Penalizes predictions on high-degree node pairs to reduce rich-get-richer effect.
 
     Intuition:
-    - High scores on high-degree pairs → reinforce existing hubs
+    - High scores on high-degree pairs -> reinforce existing hubs
     - Penalty: score * PA_score(u,v) where PA_score = sqrt(deg_u * deg_v)
     """
 

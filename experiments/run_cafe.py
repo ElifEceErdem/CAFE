@@ -38,8 +38,9 @@ for path in [parent_dir, snap_dir]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from core.data_loader import build_train_adjacency
 from metrics.coreness import compute_coreness
+from core.data_loader import load_sensitive_attr
+from core.statistics import _serialize_stats
 
 from core import (
     set_seed, str2bool, load_dataset,
@@ -147,7 +148,7 @@ def compute_ra_scores_sparse(adj_matrix):
     degrees[degrees == 0] = 1.0
     inv_deg = sp.diags(1.0 / degrees)
 
-    # A * D^-1 * A^T — result is sparse (only pairs with shared neighbors are nonzero)
+    # A * D^-1 * A^T -- result is sparse (only pairs with shared neighbors are nonzero)
     ra_matrix = (adj_matrix.dot(inv_deg)).dot(adj_matrix.T)
     ra_matrix = ra_matrix.tocsr()
 
@@ -234,7 +235,6 @@ def main():
         pos_test_edge = split_edge['test']['edge'].to(device)
 
         # === Step 1.5: Load sensitive attributes ===
-        from core.data_loader import load_sensitive_attr
         sens_attr = None
         try:
             sens_attr = load_sensitive_attr(args.data_name, num_nodes, root=args.data_path)
@@ -486,8 +486,6 @@ def main():
         experiment_info['penalization_mode'] = args.penalization_mode
         experiment_info['use_mobility_boost'] = args.use_mobility_boost
         experiment_info['config_name'] = config_name
-
-        from core.statistics import _serialize_stats
 
         final_output = {
             'experiment_info': experiment_info,

@@ -113,11 +113,6 @@ def compute_rawlsian_degree_bias(recs, pos_test_edge, degrees, num_nodes, k=10):
     node_precision = {}
     users_with_test_edges = []
     
-    # Only consider nodes that actually have test edges (to avoid noise from nodes with 0 ground truth)
-    # OR consider all nodes in 'recs'? 
-    # RawlsGCN iterates over 'idx_test', i.e., nodes in the test set.
-    # For LP, 'test set' usually means nodes involved in test edges.
-    
     test_nodes = set(test_adj.keys())
 
     for u in test_nodes:

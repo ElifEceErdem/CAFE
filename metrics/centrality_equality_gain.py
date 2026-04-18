@@ -19,7 +19,7 @@ import networkx as nx
 from typing import Dict, List, Tuple
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import eigs
-import warnings
+import networkit as nk
 
 
 def compute_gini_coefficient(values: torch.Tensor) -> float:
@@ -278,7 +278,6 @@ def _build_networkit_graph(edges: torch.Tensor, num_nodes: int):
     """
     Build a NetworKit graph from a PyTorch edge tensor (vectorized).
     """
-    import networkit as nk
 
     edges_np = edges.cpu().numpy()
     # Filter valid edges
@@ -318,7 +317,6 @@ def compute_closeness_centrality(edges: torch.Tensor, num_nodes: int,
         closeness: Closeness centrality scores [num_nodes]
     """
     try:
-        import networkit as nk
         return _compute_closeness_networkit(edges, num_nodes, use_sampling, 
                                             sample_size, epsilon)
     except ImportError:
@@ -334,9 +332,7 @@ def _compute_closeness_networkit(edges: torch.Tensor, num_nodes: int,
     Compute closeness centrality using NetworKit (C++ backend).
     
     Uses exact computation for small graphs, RAND approximation for large ones.
-    """
-    import networkit as nk
-    
+    """    
     G = _build_networkit_graph(edges, num_nodes)
     
     EXACT_THRESHOLD = 5000
@@ -398,7 +394,6 @@ def compute_harmonic_centrality(edges: torch.Tensor, num_nodes: int) -> torch.Te
         harmonic: Harmonic centrality scores [num_nodes]
     """
     try:
-        import networkit as nk
         G = _build_networkit_graph(edges, num_nodes)
         hc = nk.centrality.HarmonicCloseness(G, normalized=True)
         hc.run()
@@ -491,7 +486,7 @@ def build_predicted_centrality(
         rec_edges_tensor = torch.tensor(
             rec_edges, 
             dtype=torch.long, 
-            device=train_edges.device  # ← ADD THIS
+            device=train_edges.device  # <- ADD THIS
         )
         all_edges = torch.cat([train_edges, rec_edges_tensor], dim=0)
     

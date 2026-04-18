@@ -4,7 +4,7 @@ NDKL (Normalized Discounted KL-divergence) Fairness Metrics
 Measures fairness by comparing recommendation distribution against
 target degree distribution.
 
-Refactored to include necessary helpers and use User-Provided Implementation (1).
+Refactored to include necessary helpers
 """
 
 import torch
@@ -318,13 +318,7 @@ def compute_ndkl_metrics(
     # Build edge scores ONLY if global mode
     edge_scores = None
     if ndkl_mode == 'global':
-        # Need helper from original (simplified inline here or copied)
-        # For now, let's assume per_user mode is dominant or we implement simple scoring
-        # Re-implementing simplified score builder:
         edge_scores = {}
-        # ... (Same logic as before would go here if needed)
-        # But 'build_edge_scores_for_ndkl' above is partial.
-        # Since user mostly cares about "Implement NDKL (1)", we ensure per_user works.
         pass
 
     ndkl_results = compute_ndkl_from_recommendations(

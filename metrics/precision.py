@@ -1,5 +1,3 @@
-from typing import Dict, List
-import torch
 from metrics.fairness import distribution_fairness_from_recs
 
 def compute_metrics_from_recs(recs_by_u, test_edges, num_nodes, fairness_mode):

@@ -1,12 +1,14 @@
 # fairness_experiments_scaffold/core/data_loader.py
 import os
-import sys
 import torch
 import torch_geometric.transforms as T
 from torch_sparse import SparseTensor
 
 from backbone.snap_dataset import SNAPDataset
 from backbone.utils import gcn_normalization, adj_normalization
+
+import pandas as pd
+import numpy as np
 
 class DataConfig:
     """Configuration for dataset loading and preprocessing."""
@@ -44,7 +46,7 @@ def load_dataset(args):
     # CRITICAL: Convert to SparseTensor AND create edge_index
     data = T.ToSparseTensor()(data)
     row, col, _ = data.adj_t.coo()
-    data.edge_index = torch.stack([col, row], dim=0)  # ← MUST HAVE THIS!
+    data.edge_index = torch.stack([col, row], dim=0)  # <- MUST HAVE THIS!
 
     # Ensure node features are float if present
     if hasattr(data, 'x') and data.x is not None:
@@ -169,7 +171,6 @@ def _load_facebook_style_sens(data_name, num_nodes, root):
 
 def _load_pokec_sens(data_name, num_nodes, root):
     """Load sensitive attributes for pokec_n/pokec_z from CSV."""
-    import pandas as pd
 
     csv_map = {
         'pokec_n': 'region_job_2.csv',
@@ -201,7 +202,6 @@ def load_node_labels(data_name, num_nodes, root='./dataset'):
         torch.LongTensor of shape [num_nodes] or None
     """
     if data_name in ['pokec_n', 'pokec_z']:
-        import pandas as pd
         csv_map = {
             'pokec_n': 'region_job_2.csv',
             'pokec_z': 'region_job.csv',
@@ -221,7 +221,6 @@ def load_node_labels(data_name, num_nodes, root='./dataset'):
 
 def build_train_adjacency(train_edges, num_nodes):
     """Build adjacency list for masking training edges (vectorized)."""
-    import numpy as np
     edges_np = train_edges.cpu().numpy()
     # Filter valid edges
     mask = (edges_np[:, 0] < num_nodes) & (edges_np[:, 1] < num_nodes)
@@ -253,14 +252,11 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
     Returns:
         Modified data object
     """
-    import torch
-    from torch_sparse import SparseTensor
     
     print(f"[Virtual Edge Augmentation] Starting... (Threshold={similarity_threshold})")
     
     # 1. Identify Periphery Nodes (Low Coreness)
-    # Define "Periphery" as bottom 20% or simply low raw value?
-    # Let's use bottom 20% quantile.
+    # Define "Periphery" as bottom 20% 
     threshold_core = torch.quantile(coreness.float(), 0.2)
     periphery_mask = coreness <= threshold_core
     periphery_nodes = torch.nonzero(periphery_mask).squeeze()
@@ -268,11 +264,6 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
     print(f"  Identified {len(periphery_nodes)} periphery nodes (Core <= {threshold_core.item()})")
     
     # 2. Compute Jaccard Similarity for Periphery Nodes
-    # We only look for links BETWEEN periphery nodes or Periphery-Hub?
-    # Implementation Plan says "between periphery nodes".
-    
-    # Convert edge_index to Adjacency Sets for fast lookup
-    # (Assuming CPU for this part to save GPU memory)
     edge_index_cpu = data.edge_index.cpu()
     num_nodes = data.num_nodes
     adj_list = [set() for _ in range(num_nodes)]
@@ -282,25 +273,17 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
     
     new_edges = []
     
-    # Naive iteration might be slow. Optimization:
-    # Only check nodes that share at least 1 neighbor?
-    # For now, let's just do random sampling of candidate pairs for speed.
-    
     # Limit number of augmentations to avoid explosion
     max_new_edges = int(edge_index_cpu.size(1) * 0.05) # Max 5% increase
     
-    # Efficient Jaccard for Sparse Graphs: Use Matrix Multiplication?
     # A @ A gives number of common neighbors.
-    # We can use SparseTensor on GPU.
     
     # 2. Compute Jaccard Similarity via Sparse Matrix Multiplication
     # Jaccard(u, v) = |N(u) & N(v)| / |N(u) | N(v)|
     # Intersection = (A @ A)[u, v]
     # Union = deg[u] + deg[v] - Intersection
     
-    try:
-        from torch_sparse import SparseTensor
-        
+    try:        
         # Ensure edge_index is on device for fast compute
         edge_index = data.edge_index
         N = data.num_nodes
@@ -325,13 +308,6 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
             intersection = torch.ones(row_A2.size(0), dtype=torch.float, device=edge_index.device)
         
         # Filter 1: Ignore existing edges
-        # We can mask them out, or check later. Checking later is slower.
-        # But A^2 typically is denser than A.
-        # Let's filter by Periphery Node constraint first to reduce size.
-        
-        # We want at least one node to be Periphery? Or both?
-        # Plan says "Add synthetic edges between periphery nodes". So BOTH.
-        
         # Mask: u is periphery AND v is periphery
         mask_u = periphery_mask[row_A2]
         mask_v = periphery_mask[col_A2]
@@ -363,16 +339,6 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
         mask_loop = final_row != final_col
         final_row = final_row[mask_loop]
         final_col = final_col[mask_loop]
-        
-        # Remove existing edges?
-        # A @ A includes paths of length 2. If triangle exists, u-v exists.
-        # We need to check if (u, v) is already in A.
-        # For small graphs, we can use a set check or just let it be (multi-edge).
-        # HLGNN handles multi-edges usually (sum). But let's be clean.
-        
-        # Fast check: (A._value(final_row, final_col) == 0) ?
-        # SparseTensor doesn't support vector indexing easily for lookup.
-        # Converting existing edges to set is O(E).
         
         existing_edges = set(zip(edge_index[0].tolist(), edge_index[1].tolist()))
         
@@ -422,8 +388,6 @@ def augment_virtual_edges(data, coreness, similarity_threshold=0.20, max_candida
     # Normalization (needed for GNN)
     if hasattr(data, 'adj_t'):
         # Re-apply normalization
-        # We need to access args.encoder. But we don't have args here.
-        # Let's assume GCN/SAGE default normalization.
         data.adj_t = gcn_normalization(data.adj_t)
         
     return data

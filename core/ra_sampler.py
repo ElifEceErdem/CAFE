@@ -72,9 +72,6 @@ def ra_guided_neg_sample(pos_edge, edge_index, num_nodes, num_neg, ra_candidates
         hard_neg = torch.empty((0, 2), dtype=torch.long, device=pos_edge.device)
         
     # === 3. Combine ===
-    # Ideally we should shuffle to avoid clustering 'easy' and 'hard' blocks, 
-    # but for training loop that shuffles batch, it might represent a minor issue.
-    # Let's shuffle just in case.
     all_neg = torch.cat([easy_neg, hard_neg], dim=0)
     
     # Shuffle

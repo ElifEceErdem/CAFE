@@ -15,6 +15,9 @@ import torch
 import numpy as np
 from scipy.stats import pearsonr
 from sklearn.metrics import mean_squared_error
+from torch_geometric.utils import (
+        add_remaining_self_loops, subgraph, to_dense_adj, coalesce
+    )
 
 
 def within_group_unfairness(social_group_id, edge_index, scores,
@@ -63,7 +66,7 @@ def compute_avg_within_group_unfairness(edge_index, scores,
                                         social_groups, sens_attr):
     """
     Compute the average within-group unfairness across all social groups.
-    (1/B) * sum_{b in [B]} Delta^(b)  — used in the fairness regularizer (Eq. 29).
+    (1/B) * sum_{b in [B]} Delta^(b)  -- used in the fairness regularizer (Eq. 29).
 
     Args:
         edge_index: Edge indices [2, num_edges].
@@ -238,10 +241,6 @@ def compute_taylor_representation(model, data, social_groups, conv_type='sym'):
         }
         or None if the model architecture is incompatible.
     """
-    from torch_geometric.utils import (
-        add_remaining_self_loops, subgraph, to_dense_adj, coalesce
-    )
-
     model.encoder.eval()
     device = model.device
 
@@ -353,8 +352,6 @@ def validate_taylor_approximation(model, data, split_edge, social_groups,
     Returns:
         dict with overall and per-group PCC/NRMSE, or None if incompatible.
     """
-    from torch_geometric.utils import subgraph
-
     taylor_result = compute_taylor_representation(
         model, data, social_groups, conv_type
     )

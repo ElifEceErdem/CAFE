@@ -1,7 +1,8 @@
-import math
 from torch.utils.data import DataLoader
 from layer import *
 from loss import *
+import numpy as np
+import scipy.sparse as sp
 from utils import *
 
 
@@ -185,7 +186,7 @@ class BaseModel(object):
     def test(self, data, split_edge, batch_size, evaluator, eval_metric, fairness_mode='indegree',
              eval_chunk_size=1024, eval_batch_cands=4096):
         """
-        UPDATED: Fairness now matches PULL/Bloom implementation
+        UPDATED: Fairness matches PULL/Bloom implementation
         - Only evaluates on TEST NODES (not all nodes)
         - Supports indegree/outdegree/total modes
         - Removed Ranking Fairness Gap
@@ -279,8 +280,6 @@ class BaseModel(object):
             Returns:
                 Precision@K score (micro-averaged across test nodes)
             """
-            import numpy as np
-            import scipy.sparse as sp
 
             device = h_emb.device
             n = h_emb.size(0)
@@ -398,8 +397,6 @@ class BaseModel(object):
                 recs_by_u: dict mapping node -> list of recommended nodes
                 unique_edges: set of recommended edges (for fairness calculation)
             """
-            import numpy as np
-            import scipy.sparse as sp
 
             device = h_emb.device
             n = h_emb.size(0)

@@ -3,8 +3,7 @@ import torch
 import torch.nn.functional as F
 from backbone.model import BaseModel
 from torch.utils.data import DataLoader
-import numpy as np
-import scipy.sparse as sp
+from backbone.utils import get_pos_neg_edges
 
 class RARegModel(BaseModel):
     def __init__(self, *args, ra_matrix=None, alpha_reg=0.1, **kwargs):
@@ -35,41 +34,8 @@ class RARegModel(BaseModel):
             edge_weight_margin = None
 
         total_loss = total_examples = 0
-        
-        # Determine negative sampling strategy
-        # If 'local', we need to replicate SNAP.model logic or call utils?
-        # The standard train method in BaseModel handles sampling inside the loop using 'neg_sampler_name'.
-        # But we need access to the sampled negative edges to look up their RA scores.
-        
-        # BaseModel.train uses:
-        # neg_train_edge = get_pos_neg_edges(split_edge['train'], split_edge['train'], 
-        #                                    neg_sampler_name, num_neg)
-        # But wait, get_pos_neg_edges implementation usually returns pre-sampled or ready-to-sample structure?
-        # Let's peek at BaseModel.train implementation in SNAP/model.py if possible, 
-        # but I recall it calling get_pos_neg_edges once at start?
-        # If so, it pre-samples negatives?
-        
-        # Re-implementing the loop to have full control is safest.
-        
-        # 1. Negative Sampling
-        # For efficiency, if 'global' we can sample once.
-        # But if we want to support 'ra_guided' here too? 
-        # No, the task is RA-Regularized, usually with standard random negatives or whatever is passed.
-        
-        # Let's import get_pos_neg_edges
-        from backbone.utils import get_pos_neg_edges
-        
-        # We need to get the "structure" that BaseModel uses. 
-        # It seems it gets `neg_train_edge` which is [E, num_neg, 2]?
-        # Actual implementation of `get_pos_neg_edges` calls the sampler.
-        
-        # Let's assume standard random sampling for now if not specified.
-        
+
         _, neg_train_edge = get_pos_neg_edges('train', split_edge, edge_index=data.edge_index, num_nodes=data.num_nodes, neg_sampler_name=neg_sampler_name, num_neg=num_neg)
-        
-        # neg_train_edge might be None if name is 'local'? 
-        # If 'local' (strict negative sampling), it might sample on the fly?
-        # Typically SNAP code samples upfront for 'global'.
         
         if neg_train_edge is not None:
             neg_train_edge = neg_train_edge.to(self.device)
@@ -85,9 +51,7 @@ class RARegModel(BaseModel):
             
             if neg_train_edge is not None:
                 neg_edge = torch.reshape(neg_train_edge[perm], (-1, 2)).t() # [2, B*num_neg]
-            else:
-                # Local sampling fallback (if utilized)
-                # But let's assume we have neg_train_edges
+            else: # Local sampling fallback (if utilized)
                 pass
 
             # Predictions

@@ -603,14 +603,14 @@ def create_experiment_info(args, method_name):
     info = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'dataset': args.data_name,
-        'encoder': getattr(args, 'encoder', 'N/A'),  # ← Add default
-        'predictor': getattr(args, 'predictor', 'N/A'),  # ← Add default
+        'encoder': getattr(args, 'encoder', 'N/A'),  # <- Add default
+        'predictor': getattr(args, 'predictor', 'N/A'),  # <- Add default
         'fairness_method': method_name,
         'fairness_mode': args.fairness_mode,
         'num_runs': args.runs,
-        'epochs': getattr(args, 'epochs', 0),  # ← Add default
-        'batch_size': getattr(args, 'batch_size', 0),  # ← Add default
-        'lr': getattr(args, 'lr', 0.0),  # ← Add default
+        'epochs': getattr(args, 'epochs', 0),  # <- Add default
+        'batch_size': getattr(args, 'batch_size', 0),  # <- Add default
+        'lr': getattr(args, 'lr', 0.0),  # <- Add default
     }
     
     # Add baseline-specific info if applicable

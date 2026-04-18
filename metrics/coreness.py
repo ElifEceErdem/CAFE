@@ -6,7 +6,7 @@ Implements iterative H-index to measure node embeddedness.
 
 import torch
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict
 
 
 def compute_coreness(edges: torch.Tensor, num_nodes: int, 
@@ -19,7 +19,7 @@ def compute_coreness(edges: torch.Tensor, num_nodes: int,
     
     Algorithm:
     1. Start with H^(0) = degree
-    2. Iterate: H^(t+1)(v) = H-index of {H^(t)(u) : u ∈ N(v)}
+    2. Iterate: H^(t+1)(v) = H-index of {H^(t)(u) : u \in N(v)}
     3. Converges to coreness (k-core membership)
     
     Args:
@@ -68,7 +68,7 @@ def compute_coreness(edges: torch.Tensor, num_nodes: int,
                   f"mean_coreness={h_values.mean():.2f}")
         
         if diff < 1e-6:
-            print(f"  ✓ Converged at iteration {iteration}")
+            print(f"  Converged at iteration {iteration}")
             break
     
     return torch.from_numpy(h_values)
@@ -77,8 +77,6 @@ def compute_coreness(edges: torch.Tensor, num_nodes: int,
 def compute_h_index(values: np.ndarray) -> float:
     """
     Compute H-index of a list of values.
-    
-    H-index h: largest integer h such that at least h values are â‰¥ h.
     
     Args:
         values: Array of values

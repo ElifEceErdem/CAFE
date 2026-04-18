@@ -1,6 +1,6 @@
 # CAFE: Coreness-Aware Fairness Enhancement for Link Prediction
 
-CAFE is a fairness framework for link prediction on social networks. It addresses **degree bias** — the tendency of GNN-based recommenders to over-recommend already well-connected (high-degree/core) nodes at the expense of peripheral nodes.
+CAFE is a fairness framework for link prediction on social networks. It addresses **degree bias** -- the tendency of GNN-based recommenders to over-recommend already well-connected (high-degree/core) nodes at the expense of peripheral nodes.
 
 CAFE uses **HL-GNN** as its backbone encoder and combines it with coreness-based fairness interventions applied at different stages of the pipeline: pre-processing, in-processing, and post-processing.
 

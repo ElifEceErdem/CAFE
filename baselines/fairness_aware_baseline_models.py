@@ -15,11 +15,21 @@ import torch.nn.functional as F
 import numpy as np
 from collections import defaultdict
 from gensim.models import Word2Vec
-from torch_geometric.nn import GCNConv, SAGEConv
-from dataclasses import dataclass
-import networkx as nx
+from torch_geometric.nn import GCNConv, SAGEConv, GINConv
 from tqdm import tqdm
-
+from collections import deque
+from torch.utils.data import DataLoader
+from copy import deepcopy
+import scipy.sparse as sp
+from torch_geometric.utils import negative_sampling, to_undirected, coalesce
+import networkx as nx
+import networkit as nk
+from scipy.sparse import csr_matrix
+import math
+import copy
+from torch_geometric.utils import add_remaining_self_loops
+from torch_geometric.utils.num_nodes import maybe_num_nodes
+from torch_scatter import scatter
 
 # ==================== FAIRWALK ====================
 
@@ -259,8 +269,6 @@ class CrossWalkEmbedding:
         Border nodes are those with at least one neighbor of a different group.
         Distance = shortest path length to nearest border node.
         """
-        from collections import deque
-
         border_distance = np.full(num_nodes, -1, dtype=int)
         queue = deque()
 
@@ -596,7 +604,7 @@ class UGEBaseline(nn.Module):
 # ==================== MORAL ====================
 # Faithful port of moral_original.py from /var/scratch/eerdem/MORAL/
 # Key design:
-#   - NUM_GROUPS = 3 (edge-level groups: sens[u]+sens[v] ∈ {0,1,2})
+#   - NUM_GROUPS = 3 (edge-level groups: sens[u]+sens[v])
 #   - One encoder + one predictor per edge-group (3 each)
 #   - One Adam optimizer per group (3 total, independent)
 #   - Per-group data loaders (edges partitioned by sens[u]+sens[v])
@@ -606,7 +614,7 @@ class UGEBaseline(nn.Module):
 #   - Hyperparameters match original: lr=3e-4, weight_decay=0.0,
 #     num_hidden=128, dropout=0.2, batch_size=1024, epochs=300
 
-_MORAL_NUM_GROUPS = 3  # sens[u]+sens[v] ∈ {0, 1, 2}
+_MORAL_NUM_GROUPS = 3  # sens[u]+sens[v] 
 
 
 def _moral_normalize_features(features: torch.Tensor) -> torch.Tensor:
@@ -652,7 +660,6 @@ class MoralTwoLayerGIN(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_channels, hidden_channels),
         )
-        from torch_geometric.nn import GINConv
         self.conv1 = GINConv(mlp1)
         self.conv2 = GINConv(mlp2)
         self.activation = nn.ReLU()
@@ -687,8 +694,8 @@ class MoralLinkPredictor(nn.Module):
     """Link predictor (matches moral_original.LinkPredictor).
 
     Two modes:
-      - hidden_channels=None  → dot product (GAE / standard decoder)
-      - hidden_channels=int   → MLP: Linear(2*in, hidden) → ReLU → Linear(hidden, 1)
+      - hidden_channels=None  -> dot product (GAE / standard decoder)
+      - hidden_channels=int   -> MLP: Linear(2*in, hidden) -> ReLU -> Linear(hidden, 1)
 
     forward(embeddings, edge_index) where edge_index is [2, E].
     """
@@ -751,13 +758,13 @@ class _MoralEdgeLabelDataset(torch.utils.data.Dataset):
 class MORAL(nn.Module):
     """MORAL: Faithful port of moral_original.py.
 
-    Groups edges by sens[u]+sens[v] ∈ {0,1,2} (NUM_GROUPS=3).
+    Groups edges by sens[u]+sens[v] (NUM_GROUPS=3).
     Trains one (encoder, predictor, optimizer) triple per edge-group independently.
     Applies column-wise min-max feature normalization.
     Tracks best validation checkpoint and restores it after training.
 
     Reference: "Breaking the Dyadic Barrier: Rethinking Fairness in Link Prediction
-    Beyond Demographic Parity" — the MORAL implementation used in the AAAI submission.
+    Beyond Demographic Parity" -- the MORAL implementation used in the AAAI submission.
 
     Original: /var/scratch/eerdem/MORAL/moral_original.py
     """
@@ -853,10 +860,9 @@ class MORAL(nn.Module):
         return edges, labels
 
     def _build_group_loaders(self, split, shuffle: bool):
-        """Build one DataLoader per edge-group (sens[u]+sens[v] ∈ {0,1,2}).
+        """Build one DataLoader per edge-group (sens[u]+sens).
         Matches moral_original._build_group_loaders exactly.
         """
-        from torch.utils.data import DataLoader
         if split is None:
             return [None] * _MORAL_NUM_GROUPS
 
@@ -881,7 +887,7 @@ class MORAL(nn.Module):
     # ------------------------------------------------------------------
 
     def _train_epoch(self) -> float:
-        """One training epoch — matches moral_original._train_epoch."""
+        """One training epoch -- matches moral_original._train_epoch."""
         total_loss = 0.0
         total_batches = 0
 
@@ -914,7 +920,7 @@ class MORAL(nn.Module):
 
     @torch.no_grad()
     def _evaluate(self, loaders):
-        """Evaluate on a set of group loaders — matches moral_original._evaluate."""
+        """Evaluate on a set of group loaders -- matches moral_original._evaluate."""
         total_loss = 0.0
         total_batches = 0
 
@@ -941,9 +947,7 @@ class MORAL(nn.Module):
         return total_loss / total_batches
 
     def fit(self, epochs: int = 300) -> None:
-        """Train model, restore best validation checkpoint — matches moral_original.fit."""
-        from copy import deepcopy
-
+        """Train model, restore best validation checkpoint -- matches moral_original.fit."""
         best_val = float("inf")
         best_state = None
 
@@ -974,7 +978,7 @@ class MORAL(nn.Module):
 
     @torch.no_grad()
     def predict(self) -> torch.Tensor:
-        """Return logits for all test edges — matches moral_original.predict.
+        """Return logits for all test edges -- matches moral_original.predict.
 
         Test edges are routed to the encoder/predictor of their edge-group
         (sens[u]+sens[v]).
@@ -1019,7 +1023,7 @@ class MORAL(nn.Module):
         """Score an arbitrary set of edges [B, 2] using per-group routing.
 
         Unlike predict() which uses the stored test edges, this method
-        accepts any edge list — enabling Hits@K / MRR computation on
+        accepts any edge list -- enabling Hits@K / MRR computation on
         pos/neg test splits that the evaluation framework provides.
         """
         edges = edges.long()
@@ -1057,9 +1061,6 @@ class MORAL(nn.Module):
         Returns:
             dict {user_id -> list[neighbour_id]} of length <= k
         """
-        import scipy.sparse as sp
-        from tqdm import tqdm
-
         num_nodes = self.features.size(0)
         sens_np = self.sens_cpu.numpy()
 
@@ -1150,7 +1151,7 @@ class MORAL(nn.Module):
 
     @staticmethod
     def fair_metric(pred, labels, sens):
-        """Demographic parity and equality of opportunity — matches moral_original."""
+        """Demographic parity and equality of opportunity -- matches moral_original."""
         idx_s0 = sens == 0
         idx_s1 = sens == 1
         idx_s0_y1 = torch.logical_and(idx_s0, labels == 1)
@@ -1214,7 +1215,6 @@ def train_moral(base_model, data, split_edge, args, node_categories=None, target
     # Ensure negative training edges exist
     if 'edge_neg' not in split_edge.get('train', {}):
         print("[MORAL] Generating negative training edges...")
-        from torch_geometric.utils import negative_sampling, to_undirected
         pos_edge_index = split_edge['train']['edge'].t()
         neg_edge_index = negative_sampling(
             edge_index=to_undirected(pos_edge_index),
@@ -1254,7 +1254,6 @@ class CLB_SAGE(nn.Module):
     SAGE encoder matching the original Cross-Link-Bias implementation.
     Uses learned node embeddings (nn.Embedding), NOT node features.
     No dropout. All layers: emb_dim -> emb_dim.
-    Matches original model.py SAGE class.
     """
     def __init__(self, num_nodes, emb_dim, num_layers):
         super().__init__()
@@ -1388,14 +1387,12 @@ class CrossLinkBias(nn.Module):
     def _augment_graph(self, edge_index):
         """
         Generate augmented graph with cross-group pseudo-edges (Jaccard method).
-        Matches original pseudo_generation() in augmentation.py.
         Uses Louvain community detection for group membership (NOT sensitive attributes).
 
         Returns:
             msg_edge_index: [2, E'] edge_index for GNN forward pass (both models)
             pseudo_edges: [2, P] selected pseudo-edges (one direction only)
         """
-        import networkit as nk
 
         print(f"[CrossLinkBias] Generating augmented graph (aug_size={self.aug_size})...")
 
@@ -1450,7 +1447,7 @@ class CrossLinkBias(nn.Module):
             print("[CrossLinkBias] No augmentation needed (inter >= intra).")
             return edge_index.to(self.device), torch.zeros(2, 0, dtype=torch.long, device=self.device)
 
-        # 4. Random subsample 2 * n_aug candidates (matches original torch.manual_seed(0))
+        # 4. Random subsample 2 * n_aug candidates 
         torch.manual_seed(0)
         n_candidates = all_pseudo_edges.size(1)
         n_sample = min(n_aug * 2, n_candidates)
@@ -1458,7 +1455,6 @@ class CrossLinkBias(nn.Module):
         sampled_candidates = all_pseudo_edges[:, perm]
 
         # 5. Jaccard similarity via vectorized sparse operations
-        from scipy.sparse import csr_matrix
         print(f"[CrossLinkBias] Computing Jaccard on {sampled_candidates.size(1)} candidates (vectorized)...")
 
         # Build symmetric adjacency as scipy CSR for fast row access
@@ -1546,7 +1542,6 @@ class CrossLinkBias(nn.Module):
     def _merge_phase_eval(self, val_pos_edges, val_neg_edges):
         """
         Evaluate merged embeddings on validation set using Hits@50.
-        Matches original e2e_test() in process.py (social dataset path).
 
         Args:
             val_pos_edges: [N, 2] positive validation edges
@@ -1555,7 +1550,6 @@ class CrossLinkBias(nn.Module):
         Returns:
             hits_at_50: float
         """
-        from torch.utils.data import DataLoader
 
         self.model_ori.eval()
         self.model_aug.eval()
@@ -1584,7 +1578,7 @@ class CrossLinkBias(nn.Module):
                 )
             neg_pred = torch.cat(neg_preds, dim=0)
 
-            # Hits@50 (matches original utils.py evaluate())
+            # Hits@50
             K = 50
             if len(neg_pred) < K:
                 return 1.0
@@ -1619,8 +1613,6 @@ class CrossLinkBias(nn.Module):
             val_pos_edges: [N, 2] positive validation edges for merge-phase inner validation
             val_neg_edges: [N, 2] negative validation edges for merge-phase inner validation
         """
-        import math
-        import copy
 
         self.embeddings = None
         ori_lr = ori_lr if ori_lr is not None else self.ori_lr
@@ -1649,7 +1641,7 @@ class CrossLinkBias(nn.Module):
             aug_train_edges = ori_train_edges
         aug_confidence = torch.ones(aug_train_edges.shape[0], device=self.device)
 
-        # Early stopping patience (matches original e2e_main.py line 86)
+        # Early stopping patience 
         early_stop_patience = 5
 
         print(f"[CrossLinkBias] Training for {epochs} epochs...")
@@ -1662,7 +1654,7 @@ class CrossLinkBias(nn.Module):
             print(f"[CrossLinkBias] Merge-phase inner validation enabled "
                   f"(val_pos={val_pos_edges.shape[0]}, val_neg={val_neg_edges.shape[0]})")
 
-        # Early stopping state (matches original e2e_main.py lines 78-88)
+        # Early stopping state 
         best_epoch_hit = 0.0
         best_epoch = 0
 
@@ -1687,7 +1679,7 @@ class CrossLinkBias(nn.Module):
             optimizer_aug_merge = torch.optim.Adam(self.model_aug.parameters(), lr=LR)
             optimizer_ori_merge = torch.optim.Adam(self.model_ori.parameters(), lr=LR)
 
-            # Save model_cal state before merge phase (matches original torch.save before STEP loop)
+            # Save model_cal state before merge phase
             best_merge_hit = 0.0
             best_model_cal_state = copy.deepcopy(self.model_cal.state_dict())
 
@@ -1744,7 +1736,7 @@ class CrossLinkBias(nn.Module):
             if has_val:
                 self.model_cal.load_state_dict(best_model_cal_state)
 
-            # Early stopping (matches original e2e_main.py lines 78-88)
+            # Early stopping
             if has_val:
                 if epoch_hit > best_epoch_hit:
                     best_epoch_hit = epoch_hit
@@ -1817,9 +1809,6 @@ class SimpleGNN(nn.Module):
 # ==================== Link Bias Amplification (LBA) ====================
 
 def gcn_norm_lba(edge_index, edge_weight=None, num_nodes=None, flow="source_to_target", conv="sym", dtype=None):
-    from torch_geometric.utils import add_remaining_self_loops
-    from torch_geometric.utils.num_nodes import maybe_num_nodes
-    from torch_scatter import scatter
 
     assert flow in ['source_to_target', 'target_to_source']
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
@@ -1934,8 +1923,6 @@ class LinkBiasAmplification(nn.Module):
         sens = sens_attr.to(self.device)
         
         print(f"[LBA] Training with conv={self.conv_type}, reg={self.reg_weight}...")
-        
-        from torch_geometric.utils import negative_sampling, coalesce
 
         criterion = torch.nn.BCEWithLogitsLoss()
 
@@ -2104,7 +2091,6 @@ class FairAdj_GCNModelVAE(nn.Module):
 
 
 def fairadj_loss_function(z, pos_edge_index, mu, logvar, n_nodes):
-    from torch_geometric.utils import negative_sampling
     num_pos = pos_edge_index.size(1)
     neg_edge_index = negative_sampling(pos_edge_index, num_nodes=n_nodes, num_neg_samples=num_pos)
     
@@ -2188,7 +2174,6 @@ class FairAdj(nn.Module):
         Fit FairAdj. 
         Note: 'epochs' arg is ignored/overridden by T1/T2 to match repo behavior.
         """
-        from torch_geometric.utils import to_dense_adj
         
         features = features.to(self.device)
         sens_attr = sens_attr.to(self.device)
@@ -2241,7 +2226,7 @@ class FairAdj(nn.Module):
             intra_idx = edge_index[:, mask_intra_edge]
             inter_idx = edge_index[:, mask_inter_edge]
         else:
-            # Default mode: use ALL node pairs (matches original find_link)
+            # Default mode: use ALL node pairs
             # Sample to avoid N^2 OOM
             num_samples = self.num_nodes * 10
             row = torch.randint(0, self.num_nodes, (num_samples,), device=self.device)
@@ -2257,7 +2242,7 @@ class FairAdj(nn.Module):
             # ===== Phase T1: Train VGAE =====
             for epoch in tqdm(range(self.T1), desc=f"T1 outer={outer+1}"):
                 optimizer.zero_grad()
-                # Encode only — skip decoder to avoid N×N inner product matrix
+                # Encode only -- skip decoder to avoid N×N inner product matrix
                 mu, logvar = self.model.encode(features, adj_norm_sp)
                 z = self.model.reparameterize(mu, logvar)
                 loss = fairadj_loss_function(z, pos_edge_index, mu, logvar, self.num_nodes)
@@ -2287,7 +2272,7 @@ class FairAdj(nn.Module):
                 else:
                     z = mu
 
-                # Decode: raw logits, NO sigmoid (matches original dc with act=identity)
+                # Decode: raw logits, NO sigmoid
                 z_do = F.dropout(z, self.dropout, training=self.model.training)
 
                 # Fairness loss: MSE(intra_mean, inter_mean)
@@ -2350,7 +2335,6 @@ class FairLP_EdgeModifier:
         sens_attr: [N] binary (0 or 1)
         Returns: modified_edge_index: [2, E']
         """
-        import networkx as nx
         device = edge_index.device
         edge_index_cpu = edge_index.cpu()
         sens = sens_attr.cpu().numpy() if torch.is_tensor(sens_attr) else np.array(sens_attr)
@@ -2521,7 +2505,6 @@ class FairLP_GNN(nn.Module):
         modified_edge_index = modified_edge_index.to(self.device)
         
         print(f"[FairLP_GNN] Training GNN on modified graph for {epochs} epochs...")
-        from torch_geometric.utils import negative_sampling
         
         for epoch in tqdm(range(epochs)):
             self.gnn.train()
@@ -2632,9 +2615,6 @@ class FairLinkModel(nn.Module):
             edge_index = edge_index.t()
             
         sens_attr = sens_attr.to(self.device)
-        
-        from torch_geometric.utils import negative_sampling
-        import torch.nn.functional as F
 
         tau_x = 5
         tau_psi = 5

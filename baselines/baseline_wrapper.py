@@ -26,10 +26,12 @@ from .fairness_aware_baseline_models import (
     CrossLinkBias,
     FairAdj
 )
-from snap_evaluator import SNAPEvaluator
-import os
+from torch.utils.data import DataLoader
+from utils import get_pos_neg_edges
+from loss import auc_loss
+import torch.nn.functional as F
 import sys
-
+import os
 
 class BaselineWrapper:
     """Wrapper to make baseline models compatible with evaluation framework"""
@@ -462,7 +464,7 @@ class BaselineWrapper:
             self.model.fit(lba_edges, features, sens_attr, labels=labels, epochs=epochs, lr=self.lr)
 
         elif self.baseline_type == 'cross_link_bias':
-            # CrossLinkBias does NOT need sens_attr — it uses Louvain community detection internally
+            # CrossLinkBias does NOT need sens_attr -- it uses Louvain community detection internally
             print(f"\n[CROSS_LINK_BIAS] Training CrossLinkBias (Twins GNN) for {epochs} epochs...")
             edge_index = data.edge_index.to(self.device)
             # Pass validation edges for merge-phase inner validation (matches original)
@@ -505,10 +507,6 @@ class BaselineWrapper:
 
     def _train_gnn(self, data, split_edge, epochs, batch_size):
         """Train the Pure GNN model with optional fairness loss"""
-        from torch.utils.data import DataLoader
-        from utils import get_pos_neg_edges
-        from loss import auc_loss
-        
         self.model.train()
         
         # Get training edges
@@ -609,11 +607,7 @@ class BaselineWrapper:
                     break
                     
     def _train_ssnet(self, data, split_edge, epochs, batch_size):
-        """Train SSNet with BPR loss (matches original SSNet implementation)."""
-        import torch.nn.functional as F
-        from torch.utils.data import DataLoader
-        from utils import get_pos_neg_edges
-
+        """Train SSNet with BPR loss."""
         self.model.train()
 
         pos_train_edge, neg_train_edge = get_pos_neg_edges(
@@ -692,10 +686,7 @@ class BaselineWrapper:
                     break
 
     def _train_lightgcn(self, data, split_edge, epochs, batch_size):
-        """Train the LightGCN model"""
-        from torch.utils.data import DataLoader
-        from utils import get_pos_neg_edges
-        
+        """Train the LightGCN model"""        
         self.model.train()
         
         pos_train_edge, neg_train_edge = get_pos_neg_edges(
@@ -758,9 +749,6 @@ class BaselineWrapper:
                     break
                     
     def _train_ltlp(self, data, split_edge, batch_size):
-        from torch.utils.data import DataLoader
-        import sys
-        import os
         snap_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../SNAP'))
         if snap_path not in sys.path:
             sys.path.insert(0, snap_path)
@@ -971,10 +959,6 @@ class BaselineWrapper:
                 
     def _train_uge(self, data, split_edge, sens_attr, epochs, batch_size):
         """Train the UGE model with optional edge reweighting and regularization."""
-        from torch.utils.data import DataLoader
-        from utils import get_pos_neg_edges
-        from loss import auc_loss
-
         self.model.train()
 
         # Get training edges
@@ -1141,7 +1125,6 @@ class BaselineWrapper:
     def test(self, data, split_edge, batch_size, evaluator, eval_metric='all', fairness_mode='indegree',
              use_equality_gain=False, use_centrality_gain=False, centrality_types=None):
         """Evaluate baseline model with comprehensive metrics"""
-        import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         print(f"\n[{self.baseline_type.upper()}] Evaluating...")
@@ -1159,7 +1142,7 @@ class BaselineWrapper:
         pos_test_edge = split_edge['test']['edge'].to(self.device)
         neg_test_edge = split_edge['test']['edge_neg'].to(self.device)
 
-        # Compute predictions — MORAL uses predict_scores() for per-edge scoring
+        # Compute predictions -- MORAL uses predict_scores() for per-edge scoring
         if self.baseline_type == 'moral':
             pos_test_pred = self.model.predict_scores(pos_test_edge).cpu()
             neg_test_pred = self.model.predict_scores(neg_test_edge.view(-1, 2)).cpu()

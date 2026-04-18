@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.csgraph import laplacian
-from sklearn.metrics import roc_auc_score
 import torch.nn.functional as F
 from sklearn import preprocessing as skpp
 
@@ -58,25 +57,6 @@ def calculate_group_lap(sim, sens):
     # Map sens to 0..K
     sens_map = {s: i for i, s in enumerate(unique_sens)}
     sens_idx = [sens_map[s] for s in sens]
-    
-    # We need to build separate similarity matrices
-    # PyGDebias implementation iterates nonzero elements.
-    # For efficiency on large graphs, we might want to mask instead.
-    
-    # However, following PyGDebias logic strictly:
-    # They create sim_list where sim_list[g] has 2*sim if intra-group g, 0 if intra-group other, 1*sim if inter-group
-    # Actually logic is:
-    # if intra-group (sensRow == sensCol):
-    #    sim_list[sensRow] = 2 * val
-    #    sim_list[other] = 0
-    # else (inter-group):
-    #    sim_list[all] = val (implied 0.5+0.5 contribution to m_list?)
-    
-    # Let's try to vectorize or keep it simple if graph is small. 
-    # Since PyGDebias iterates, it might be slow for large graphs.
-    # But for "100% correct" implementation based on request, we should follow logic.
-    # For large graphs, we might need to optimize. 
-    # Given we use 'pokec_n', iteration might be too slow.
     
     # Vectorized approximation of PyGDebias logic:
     rows, cols = sim.nonzero()
@@ -282,22 +262,13 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
     # Difference in TPR between groups.
     # TPR_g = (Correct Recs to g) / (Total True Links to g)
     # ----------------------------------------------------
-    
-    # Identify true links (test edges)
-    # We need to map test edges to their target nodes?
-    # Actually EO is usually: P(v in Rec | v in TrueNeighbors(u), v in G)
-    
-    # Build set of true edges for quick lookup
-    # But easier: iterate test edges, see if caught in recs
-    
-    # Let's count "hits" per group and "total possibilities" per group
+
     hits_0 = 0
     hits_1 = 0
     total_0 = 0
     total_1 = 0
     
     # We need to check if (u, v) in recs for each (u, v) in test_edges
-    # This might be slow if we iterate.
     # Faster: convert recs to set per user
     recs_sets = {u: set(vs[:k]) for u, vs in recs_by_u.items()}
     
@@ -310,9 +281,6 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
     # Ensure [E, 2]
     if te.shape[0] == 2 and te.shape[1] != 2:
         te = te.T
-    
-    # If it is [2, 2], ambigous but standard PyG is usually [2, E], so .T is likely correct if coming from split_edge
-    # But usually E >> 2 for test set.
         
     for i in range(len(te)):
         u, v = te[i]
@@ -371,13 +339,6 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
         
     # Need Features for Similarity
     if features is None:
-        # If no features, maybe use identity or skip?
-        # PyGDebias usually assumes features.
-        # Fallback to Identity if None? Or skip.
-        # Let's try to use Identity if features missing, but warn?
-        # Better to skip Ranking_IF if no features, but IF uses 'cosine' on X.
-        # If X is missing, IF is undefined/0?
-        # Let's use Identity features as fallback if not present
         x = sp.eye(num_nodes, format='csr')
     else:
         if torch.is_tensor(features):
@@ -394,63 +355,9 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
     # ----------------------------------------------------
     try:
         # similarity of X
-        sim_x = calculate_similarity_matrix(adj, x, metric='cosine') # signature in metrics.py was (adj, features, ...)?
-        # Wait, calculate_similarity_matrix in PyGDebias (line 151) takes (adj, features, ...)
-        # But looking at code:
-        # def calculate_similarity_matrix(adj, features, metric=None...):
-        #    if metric in ['cosine'...]:
-        #       sim = get_similarity_matrix(adj, metric) -- WAIT, it passes ADJ NOT FEATURES?
-        # PROBABLY A BUG in PyGDebias or I misread.
-        # Line 158: sim = get_similarity_matrix(adj, metric=metric)
-        # It ignores 'features' arg?
-        # Let's check IF function line 291:
-        # sim = calculate_similarity_matrix(adj, x, metric='cosine')
-        # If PyGDebias ignores x, then IF depends on graph topology?
-        # Users request says "Please be careful. Do not make up anything."
-        # If PyGDebias code uses adj, I use adj.
-        # BUT 'metrics.py' line 79-82 uses 'mat'. In line 158 passed 'adj'.
-        # So it seems IF in PyGDebias uses ADJACENCY similarity?
-        # But usually IF uses Feature similarity.
-        # Let's check 'metrics.py' view again.
-        
-        # Line 291: sim = calculate_similarity_matrix(adj, x, metric='cosine')
-        # Line 151 def: (adj, features, metric...)
-        # Line 158: sim = get_similarity_matrix(adj, metric=metric)
-        # YES, PyGDebias seems to use ADJACENCY for similarity in `calculate_similarity_matrix`.
-        # UNLESS `get_similarity_matrix` is overloaded? No.
-        
-        # HOWEVER, we want a useful metric.
-        # If I strictly follow PyGDebias CODE: it uses Adj.
-        # If I follow PyGDebias INTENT (paper): IF usually defined on input features.
-        # Given "Do not make up anything", I should follow the CODE reference provided?
-        # The user pointed to the file.
-        # I will follow the CODE logic: use `adj` for similarity if strictly following PyGDebias/metrics.py.
-        # BUT, wait. `x` is passed.
-        # Maybe `metrics.py` provided was a specific version.
-        # Let's double check if I can use features if available.
-        # Actually line 151-163 DOES NOT USE `features` variable. It's an unused arg.
-        # So I will use `adj` for similarity calculation to match the provided file exactly.
-        
-        sim = get_similarity_matrix(x, metric='cosine') # WAIT. If I use ADJ, it's topology fairness.
-        # If I use X, it's attribute fairness.
-        # Standard definitions (e.g. Dwork) use a distance metric on individuals (attributes).
-        # Context: "Heuristic Learning with Graph Neural..." usually uses topology.
-        # Let's compromise: I will use `x` (features) if available, because that's what makes sense for "Individual Fairness" (similar attributes -> similar treatment). 
-        # Using `adj` would mean "similar position in graph -> similar embedding", which is implicitly what GNNs do.
-        # The PyGDebias code *might* have a bug or `adj` was meant to be the feature matrix passed in as first arg?
-        # function IF(adj, x, y_hat):
-        #    sim = calculate_similarity_matrix(adj, x, metric='cosine')
-        # And calculate_similarity_matrix(matrix, ...) uses the first arg.
-        # So it uses `adj`.
-        # Okay, I will use `adj` to be 100% faithful to the text of the provided code, checking if `x` was swapped.
-        # Line 279: def IF(adj, x, y_hat). passed adj as 1st.
-        # I will use `adj`.
-        
+        sim_x = calculate_similarity_matrix(adj, x, metric='cosine') 
+        sim = get_similarity_matrix(x, metric='cosine') 
         sim_val = calculate_similarity_matrix(adj, x, metric='cosine') 
-        # Wait, I'll implement `calculate_similarity_matrix` to take `mat` and use it.
-        # In `compute_demographic_metrics`, I will pass `x` (features) as the matrix if I want feature-based IF, or `adj` if I want topology IF.
-        # Given the "PyGDebias" README usually implies feature/topology, and the code uses `adj`, I will use `adj`.
-        
         pass
         
     except:
@@ -459,8 +366,7 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
     # Re-implementing logic with checks
     
     # IF
-    # PyGDebias uses 'cosine' on adj (based on reading).
-    # To be safe and "correct" per code:
+    # PyGDebias uses 'cosine' on adj.
     sim_adj = get_similarity_matrix(adj, metric='cosine')
     lap = laplacian(sim_adj) # scipy
     lap_tensor = sparse_mx_to_torch_sparse_tensor(lap).to(device)
@@ -478,19 +384,7 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
 
     # ----------------------------------------------------
     # 4. GDIF (Group Denoised Individual Fairness)
-    # ----------------------------------------------------
-    # Uses calculate_group_lap(sim, sens)
-    # Requires `sim`. PyGDebias code uses same `sim` variable as IF?
-    # In `metrics.py`: 
-    # def GDIF(y_hat, sens): 
-    #    lap_list, ... = calculate_group_lap(sim, sens) 
-    # `sim` is not passed to GDIF! It relies on GLOBAL `sim` being defined?
-    # Lines 305: calculate_group_lap(sim, sens). `sim` is likely from outer scope in a script, but undefined in function scope of `metrics.py` provided!
-    # "301: def GDIF(y_hat, sens):" - SIM IS NOT AN ARGUMENT.
-    # It must be a bug in the provided snippet or assumes `sim` global.
-    # To fix this, I must obtain `sim`.
-    # I will assume `sim` is the same similarity matrix used in IF (from `adj` or `x`).
-    
+    # ----------------------------------------------------    
     lap_list, m_list = calculate_group_lap(sim_adj, sens_np)
     
     if len(lap_list) >= 2:
@@ -518,13 +412,6 @@ def compute_demographic_metrics(recs_by_u, train_edges, test_edges, num_nodes, s
     # ----------------------------------------------------
     # 5. Ranking_IF
     # ----------------------------------------------------
-    # Considers test users subset?
-    # Function `ranking_based_IF(x, y_hat, idx_test, top_k)`
-    # Uses `x[idx_test]` and `y_hat[idx_test]`.
-    # Similarity is computed on feature subset and embedding subset.
-    
-    # We evaluate on `test_users` usually.
-    # Let's extract test users from `test_edges`.
     if torch.is_tensor(test_edges):
         te = test_edges.cpu().numpy()
     else:
@@ -561,7 +448,7 @@ def compute_demographic_parity_ratio_change(train_edges, recs_by_u, num_nodes, s
     
     R = AvgDeg(G1) / AvgDeg(G0)  (Assuming G0 is reference, or G1/G2 as user said)
     The user specified: R = AvgDeg(G1) / AvgDeg(G2). 
-    We assume binary groups 0 and 1. Let's use R = AvgDeg(1) / AvgDeg(0).
+    We assume binary groups 0 and 1. use R = AvgDeg(1) / AvgDeg(0).
     
     Metric = (R_before - R_after) / R_before
     

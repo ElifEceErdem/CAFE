@@ -5,7 +5,6 @@ Handles fairness-aware loss computation and evaluation with advanced metrics.
 """
 
 import copy
-import torch
 from tqdm import tqdm
 
 from backbone.snap_evaluator import SNAPEvaluator
