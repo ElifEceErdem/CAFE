@@ -1,9 +1,6 @@
 """
 Precision vs Equality-Gain Trade-off — Table-Matched Highlights
 ================================================================
-Same scatter plots as plot_precision_eg_tradeoff.py, but with markers
-that match the paper table analysis:
-
   - Star (★)    : best overall 4D trade-off method per dataset (ASF-based,
                    same weights as generate_final_tables.py)
   - Diamond (◆) : best-per-column methods (highest Precision@10 or highest

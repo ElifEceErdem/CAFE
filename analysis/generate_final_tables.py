@@ -1,11 +1,6 @@
 """
 Final Results Table Generator
 =============================
-Reads all experiment results from d_final_results_compare/,
-selects best configurations per method per dataset using the
-Pareto front + ASF logic from pareto_hypervolume_analysis.py,
-and outputs two paper-style CSV tables:
-
   Table 1: Precision@10 + Equality Gain metrics
            (Equality_Gain@10, Pagerank_EG@10, Closeness_EG@10)
 
