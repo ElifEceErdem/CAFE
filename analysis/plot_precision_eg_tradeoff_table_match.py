@@ -257,9 +257,9 @@ def plot_single_panel(ax, df_ds, eg_metric, color_map,
     Scatter + error bars for one (dataset, eg_metric) panel.
 
     Markers:
-      ▲ triangle — CAFE-In / CAFE-Pre  (emphasised)
-      ◆ diamond  — best-per-column  (best Precision OR best this-EG)
-      ● circle   — everything else
+    triangle — CAFE-In / CAFE-Pre  (emphasised)
+    diamond  — best-per-column  (best Precision OR best this-EG)
+    circle   — everything else
 
     Pareto frontier drawn with dashed line.
     """
