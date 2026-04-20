@@ -1,11 +1,11 @@
 """
 Precision vs Equality-Gain Trade-off — Table-Matched Highlights
 ================================================================
-  - Star (★)    : best overall 4D trade-off method per dataset (ASF-based,
+  - Star    : best overall 4D trade-off method per dataset (ASF-based,
                    same weights as generate_final_tables.py)
-  - Diamond (◆) : best-per-column methods (highest Precision@10 or highest
+  - Diamond : best-per-column methods (highest Precision@10 or highest
                    EG metric for that subplot)
-  - Circle (●)  : all other methods
+  - Circle  : all other methods
 
 Output:
   - full_comparison_matrix_table_match.pdf   (grid, all datasets × EG metrics)
