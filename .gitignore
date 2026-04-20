@@ -2,4 +2,6 @@ data/SNAP/brightkite/
 data/SNAP/pokec_n/
 data/SNAP/pokec_z/
 data/SNAP/facebook/
+analysis/table1_precision_equality_gain.csv
+analysis/table2_precision_demographic.csv
 jobs

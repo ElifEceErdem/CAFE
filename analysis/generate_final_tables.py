@@ -19,14 +19,14 @@ import glob
 import pandas as pd
 import numpy as np
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-from pymoo.indicators.hv import Hypervolume
 from pymoo.decomposition.asf import ASF
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-BASE_DIR = "/home/eerdem/workspace/HL-GNN/fairness_experiments_scaffold/d_final_results_compare"
-OUTPUT_DIR = BASE_DIR
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../results"))
+OUTPUT_DIR = SCRIPT_DIR
 
 # All metrics we want to extract
 ALL_METRICS = [
@@ -51,8 +51,8 @@ PARETO_OBJECTIVES = [
     "Closeness_EG@10",
 ]
 
-# ASF weights 
-WEIGHTS = np.array([0.6, 0.3, 0.1, 0.1])
+# ASF weights
+WEIGHTS = np.array([0.5, 0.3, 0.1, 0.1])
 
 # Display name mapping
 METHOD_RENAME = {
@@ -105,7 +105,7 @@ def extract_baselines(base_dir):
     if not os.path.exists(baselines_dir):
         return rows
 
-    for fpath in sorted(glob.glob(os.path.join(baselines_dir, "*.json"))):
+    for fpath in sorted(glob.glob(os.path.join(base_dir, "*", "baselines", "*.json"))):
         with open(fpath) as f:
             data = json.load(f)
 
@@ -201,13 +201,19 @@ def extract_all_results(base_dir):
         "hybrid_penalized_C_pre": "Hybrid Penalized C (Preproc)",
         "hybrid_penalized_D_in": "Hybrid Penalized D (Inproc)",
         "hybrid_penalized_D_pre": "Hybrid Penalized D (Preproc)",
+        "cafe_in": "Hybrid Penalized D (Inproc)",
+        "cafe_pre": "Hybrid Penalized D (Preproc)",
+        "cafe_p": "Hybrid Analysis",
+        "cafe_in_b": "Hybrid Penalized C (Inproc)",
+        "cafe_pre_b": "Hybrid Penalized C (Preproc)",
+        "coreness_inverse": "Coreness Inverse Inproc",
+        "ci_pre": "Coreness Inverse Preproc",
+        "mobility_boost": "Coreness Mobility Boost Postproc",
+        "mb_post": "Coreness Mobility Boost Postproc",
     }
 
     for dirname, method_group in lambda_method_dirs.items():
-        dirpath = os.path.join(base_dir, dirname)
-        if not os.path.exists(dirpath):
-            continue
-        for fpath in sorted(glob.glob(os.path.join(dirpath, "*.json"))):
+        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
             fname = os.path.basename(fpath)
             if "best_config" in fname:
                 continue  # handled separately in aggregate_best_config_runs
@@ -236,10 +242,7 @@ def extract_all_results(base_dir):
 
     # 2b. Additional baselines in common_baselines/ and preferential_attachment/
     for extra_baselines_dir in ["common_baselines", "preferential_attachment"]:
-        extra_dir = os.path.join(base_dir, extra_baselines_dir)
-        if not os.path.exists(extra_dir):
-            continue
-        for fpath in sorted(glob.glob(os.path.join(extra_dir, "*.json"))):
+        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", extra_baselines_dir, "*.json"))):
             with open(fpath) as f:
                 data = json.load(f)
             dataset = data["experiment_info"]["dataset"]
@@ -269,10 +272,7 @@ def extract_all_results(base_dir):
     }
 
     for dirname, method_group in single_method_dirs.items():
-        dirpath = os.path.join(base_dir, dirname)
-        if not os.path.exists(dirpath):
-            continue
-        for fpath in sorted(glob.glob(os.path.join(dirpath, "*.json"))):
+        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
             with open(fpath) as f:
                 data = json.load(f)
             rows = extract_single_method_results(fpath, data, method_group)
@@ -376,22 +376,31 @@ _BEST_CONFIG_DIRS = {
     "hybrid_penalized_C_pre": "Hybrid Penalized C (Preproc)",
     "hybrid_penalized_D_in": "Hybrid Penalized D (Inproc)",
     "hybrid_penalized_D_pre": "Hybrid Penalized D (Preproc)",
+    "cafe_in": "Hybrid Penalized D (Inproc)",
+    "cafe_pre": "Hybrid Penalized D (Preproc)",
+    "cafe_p": "Hybrid Analysis",
+    "cafe_in_b": "Hybrid Penalized C (Inproc)",
+    "cafe_pre_b": "Hybrid Penalized C (Preproc)",
+    "coreness_inverse": "Coreness Inverse Inproc",
+    "ci_pre": "Coreness Inverse Preproc",
+    "mobility_boost": "Coreness Mobility Boost Postproc",
+    "mb_post": "Coreness Mobility Boost Postproc",
 }
 
 # HLGNN baseline config key in hybrid_analysis
 _HLGNN_BASELINE_KEY = "beta_0.0_lambda_0.0"
 
 
-def _collect_values_for_config(dirpath, config_key, target_dataset):
+def _collect_values_for_config(base_dir, dirname, config_key, target_dataset):
     """
-    Scan all non-best_config JSON files in *dirpath* for *config_key*
+    Scan all non-best_config JSON files in *dirname* for *config_key*
     that match *target_dataset*, and return the values arrays for every
     metric found.
 
     Returns dict: metric_name -> list of individual values
     """
     metric_values = {}
-    for fpath in sorted(glob.glob(os.path.join(dirpath, "*.json"))):
+    for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
         fname = os.path.basename(fpath)
         if "best_config" in fname:
             continue
@@ -422,14 +431,8 @@ def aggregate_best_config_runs(base_dir):
     aggregated = []
 
     for dirname, method_group in _BEST_CONFIG_DIRS.items():
-        dirpath = os.path.join(base_dir, dirname)
-        if not os.path.exists(dirpath):
-            continue
-
-        # Group best_config files by (dataset, config_key)
-        # so that split runs (run1, run2) are combined.
         groups = {}  # (dataset, config_key) -> list of values per metric
-        for fpath in sorted(glob.glob(os.path.join(dirpath, "*best_config*.json"))):
+        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*best_config*.json"))):
             with open(fpath) as f:
                 data = json.load(f)
             dataset = data["experiment_info"]["dataset"]
@@ -449,7 +452,7 @@ def aggregate_best_config_runs(base_dir):
 
         # For each (dataset, config_key), also collect values from original files
         for (dataset, config_key), bc_values in groups.items():
-            orig_values = _collect_values_for_config(dirpath, config_key, dataset)
+            orig_values = _collect_values_for_config(base_dir, dirname, config_key, dataset)
 
             # Merge: original values + best_config values
             all_metrics = set(list(orig_values.keys()) + list(bc_values.keys()))
@@ -524,16 +527,12 @@ def aggregate_single_method_runs(base_dir):
     aggregated = []
 
     for (dirname, method_group), datasets in _SINGLE_METHOD_AGGREGATE.items():
-        dirpath = os.path.join(base_dir, dirname)
-        if not os.path.exists(dirpath):
-            continue
-
         for target_dataset in datasets:
             # Collect values from all files for this dataset
             combined = {}  # metric_name -> list of values
             total_runs = 0
 
-            for fpath in sorted(glob.glob(os.path.join(dirpath, "*.json"))):
+            for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
                 with open(fpath) as f:
                     data = json.load(f)
                 if data.get("experiment_info", {}).get("dataset") != target_dataset:

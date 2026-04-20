@@ -27,7 +27,7 @@ from fairness_methods.reranking import (
         )
 
 from fairness_methods.reranking_coreness import CorenessReRanker
-from ndkl_helper import categorize_nodes_by_degree, compute_target_distribution
+from metrics.ndkl import categorize_nodes_by_degree, compute_target_distribution
 
 
 import numpy as np
