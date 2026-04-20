@@ -12,7 +12,7 @@ CAFE uses **HL-GNN** as its backbone encoder and combines it with coreness-based
 CAFE/
 ├── backbone/                   # HL-GNN backbone (from SNAP)
 ├── core/                       # Pipeline: data loading, training, evaluation, RA models
-├── fairness_methods/           # Fairness interventions (in-proc, re-ranking, calibration)
+├── fairness_methods/           # Fairness interventions (in-processing, re-ranking)
 ├── metrics/                    # Evaluation metrics (coreness, EG, fairness, precision, ...)
 ├── baselines/                  # Baseline and fairness-aware baseline implementations
 ├── experiments/                # Main experiment runners (one per CAFE variant)
@@ -26,9 +26,9 @@ CAFE/
 
 ### File listing
 
-- **[backbone/](backbone/)** — `model.py` (HLGNN encoder + MLP predictor), `layer.py`, `loss.py` (AUC/BCE), `utils.py`, `negative_sample.py`, `logger.py`
+- **[backbone/](backbone/)** — `model.py` (HLGNN encoder + MLP predictor), `layer.py`, `loss.py` (AUC/BCE), `utils.py`, `negative_sample.py`, `logger.py`, `snap_dataset.py`, `snap_evaluator.py`
 - **[core/](core/)** — `data_loader.py`, `evaluation.py`, `training.py`, `training_inproc.py` (fairness-aware loop), `statistics.py`, `utils.py`, `model_ra.py`, `model_ra_reg.py`, `ra_features.py`, `ra_sampler.py`
-- **[fairness_methods/](fairness_methods/)** — `inprocessing.py` (FairnessAwareModel, coreness-inverse loss, mobility-boost aggregation), `reranking_coreness.py`, `reranking.py`, `reranking_pa.py`, `reranking_exposure.py`, `calibration.py`, `moral_integration.py`
+- **[fairness_methods/](fairness_methods/)** — `inprocessing.py` (FairnessAwareModel, coreness-inverse loss, mobility-boost aggregation), `reranking_coreness.py` (CorenessReRanker, used by MB-Post), `moral_integration.py` (MORAL baseline integration)
 - **[metrics/](metrics/)** — `coreness.py`, `equality_gain.py`, `centrality_equality_gain.py`, `demographics.py`, `degree_analysis.py`, `precision.py`, `fairness.py`, `pa_aware.py`, `ndkl.py`, `networked_inequality.py`, `classification.py`, `stratified.py`
 - **[baselines/](baselines/)** — `baseline_models.py` (CN, RA, AA, PA, LightGCN, SSNet, TailSTEAK, ...), `baseline_wrapper.py`, `fairness_aware_baseline_models.py` (FairAdj, CrossWalk, LBA, MORAL, ...), `tailsteak_dataloader.py`
 - **[experiments/](experiments/)** — `run_cafe.py` (CAFE-In / -Pre / -In-B / -Pre-B), `run_cafe_p.py` (CAFE-P, also HLGNN baseline), `run_coreness_inverse.py` (CI-In / CI-Pre), `run_mobility_boost.py` (MB-Post)

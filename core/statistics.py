@@ -175,21 +175,21 @@ def print_summary_table(baseline_stats, lambda_stats, lambda_values,
     if use_ndkl or use_pa_aware or use_equality_gain:
         print("\nMetric Interpretation:")
         if use_ndkl:
-            print("  • NDKL@K: Lower is better (0 = perfectly fair ranking)")
-            print("  • Negative Δ in NDKL = improvement in fairness")
+            print("   NDKL@K: Lower is better (0 = perfectly fair ranking)")
+            print("   Negative Δ in NDKL = improvement in fairness")
         if use_pa_aware:
-            print("  • PA_Bias_Score: Change in PA bias (negative = reduced bias)")
-            print("  • PA_Fairness_Score: Normalized fairness gain [-1, 1]")
-            print("  • PA_Overlap_Mean: Average overlap with PA recommendations")
+            print("   PA_Bias_Score: Change in PA bias (negative = reduced bias)")
+            print("   PA_Fairness_Score: Normalized fairness gain [-1, 1]")
+            print("   PA_Overlap_Mean: Average overlap with PA recommendations")
         if use_equality_gain:
-            print("  • Equality_Gain@K: Percentage improvement over control (higher = more fair)")
-            print("  • Positive Δ = further improvement in equality")
+            print("   Equality_Gain@K: Percentage improvement over control (higher = more fair)")
+            print("   Positive Δ = further improvement in equality")
         if use_centrality_gain:
-            print("  • *_EG@K (Centrality-based): Equality Gain for specific centrality measures")
-            print("  • Computed for: Degree, Katz, PageRank, Eigenvector, Closeness centrality")
-            print("  • Positive Δ = more equitable distribution across network positions")
+            print("   *_EG@K (Centrality-based): Equality Gain for specific centrality measures")
+            print("   Computed for: Degree, Katz, PageRank, Eigenvector, Closeness centrality")
+            print("   Positive Δ = more equitable distribution across network positions")
         if use_stratified:
-            print("  • Stratified metrics show performance on low-degree (bottom 20%) and high-degree (top 20%) nodes")
+            print("   Stratified metrics show performance on low-degree (bottom 20%) and high-degree (top 20%) nodes")
 
 def print_k_wise_summary(k_stats, lambda_values, k_values=[10, 20, 50, 100],
                         use_ndkl=False, use_pa_aware=False, use_equality_gain=False,

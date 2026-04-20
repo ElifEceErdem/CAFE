@@ -1145,7 +1145,7 @@ def main():
         mean_p = full_df[full_df['model'] == model_name]['precision'].mean()
         print(f"    {model_name}: {mean_p:.4f}")
 
-    print("\n✓ Per-Coreness Precision Breakdown complete!")
+    print("\n Per-Coreness Precision Breakdown complete!")
 
 
 if __name__ == "__main__":
