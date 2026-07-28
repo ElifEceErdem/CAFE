@@ -110,9 +110,15 @@ class SNAPDataset(InMemoryDataset):
                 elif val.shape[0] == num_nodes_re:
                     setattr(clean, attr, val)
 
-        # Collate and overwrite processed/data.pt
+        # Collate and overwrite processed/data.pt. Skip the write when the
+        # cleanup was a no-op (file already contiguous & undirected), and make
+        # it atomic otherwise: concurrent jobs load this dataset simultaneously
+        # and must never observe a partially written file.
         data_out, slices_out = self.collate([clean])
-        torch.save((data_out, slices_out), processed_file)
+        if not torch.equal(edge_index_re, edge_index):
+            tmp_file = f"{processed_file}.tmp.{os.getpid()}"
+            torch.save((data_out, slices_out), tmp_file)
+            os.replace(tmp_file, processed_file)
 
         # Update the in-memory copy too so the rest of your code sees the fix
         self.data, self.slices = data_out, slices_out

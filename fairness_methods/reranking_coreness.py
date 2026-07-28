@@ -83,9 +83,10 @@ class CorenessReRanker:
                 coreness_percentile = np.zeros_like(coreness_np)
 
         # Build sparse CSR mask for vectorized masking
-        edges_cpu = train_edges.cpu().numpy()
-        rows = np.concatenate([edges_cpu[0], edges_cpu[1]])
-        cols = np.concatenate([edges_cpu[1], edges_cpu[0]])
+        from core.evaluation import canon_edges_2col
+        edges_cpu = canon_edges_2col(train_edges).numpy()
+        rows = np.concatenate([edges_cpu[:, 0], edges_cpu[:, 1]])
+        cols = np.concatenate([edges_cpu[:, 1], edges_cpu[:, 0]])
         valid_mask = (rows < n) & (cols < n)
         rows, cols = rows[valid_mask], cols[valid_mask]
         train_mask_csr = sp.csr_matrix(

@@ -24,7 +24,7 @@ def compute_equality_gain_vs_degree_by_source(
     num_nodes: int,
     k: int,
     num_bins: int = 10,
-    fairness_mode: str = 'indegree'
+    graph_semantics: str = 'simple_undirected'
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute equality gain@K as a function of SOURCE node degree.
@@ -39,7 +39,7 @@ def compute_equality_gain_vs_degree_by_source(
         num_nodes: Total number of nodes
         k: Cutoff value
         num_bins: Number of degree bins
-        fairness_mode: Degree counting mode
+        graph_semantics: Structural-EG graph semantics
     
     Returns:
         (bin_centers, equality_gains)
@@ -50,7 +50,7 @@ def compute_equality_gain_vs_degree_by_source(
     if deg_max == deg_min:
         # All nodes have same degree
         eq_gain, _, _ = compute_equality_gain(
-            recs_by_u, train_edges, test_edges, num_nodes, k, fairness_mode
+            recs_by_u, train_edges, test_edges, num_nodes, k, graph_semantics
         )
         return np.array([deg_min]), np.array([eq_gain])
     
@@ -76,7 +76,7 @@ def compute_equality_gain_vs_degree_by_source(
         
         # Compute equality gain for this bin
         eq_gain, _, _ = compute_equality_gain(
-            recs_bin, train_edges, test_bin, num_nodes, k, fairness_mode
+            recs_bin, train_edges, test_bin, num_nodes, k, graph_semantics
         )
         
         bin_centers.append((bins[i] + bins[i + 1]) / 2)
@@ -94,7 +94,7 @@ def compute_equality_gain_vs_degree_by_target(
     num_nodes: int,
     k: int,
     num_bins: int = 10,
-    fairness_mode: str = 'indegree'
+    graph_semantics: str = 'simple_undirected'
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute equality gain@K as a function of TARGET node degree.
@@ -109,7 +109,7 @@ def compute_equality_gain_vs_degree_by_target(
         num_nodes: Total number of nodes
         k: Cutoff value
         num_bins: Number of degree bins
-        fairness_mode: Degree counting mode (should be 'indegree' for target)
+        graph_semantics: Structural-EG graph semantics
     
     Returns:
         (bin_centers, equality_gains)
@@ -120,7 +120,7 @@ def compute_equality_gain_vs_degree_by_target(
     if deg_max == deg_min:
         # All nodes have same degree - compute overall
         eq_gain, _, _ = compute_equality_gain(
-            recs_by_u, train_edges, test_edges, num_nodes, k, fairness_mode
+            recs_by_u, train_edges, test_edges, num_nodes, k, graph_semantics
         )
         return np.array([deg_min]), np.array([eq_gain])
     
@@ -180,7 +180,7 @@ def analyze_degree_effects_comparison(
     num_nodes: int,
     k: int = 10,
     num_bins: int = 10,
-    fairness_mode: str = 'indegree',
+    graph_semantics: str = 'simple_undirected',
     stratification_mode: str = 'source', 
     save_dir: str = None
 ) -> Dict[str, Dict]:
@@ -195,7 +195,7 @@ def analyze_degree_effects_comparison(
         num_nodes: Total number of nodes
         k: Cutoff value
         num_bins: Number of degree bins
-        fairness_mode: Degree counting mode
+        graph_semantics: Structural-EG graph semantics
         stratification_mode: 'source', 'target', or 'mixed' (default: 'source')
         save_dir: Directory to save plots
     
@@ -223,17 +223,17 @@ def analyze_degree_effects_comparison(
         if stratification_mode == 'source':
             bin_centers_eq, eq_gains = compute_equality_gain_vs_degree_by_source(
                 recs_by_u, train_edges, test_edges, degrees, num_nodes,
-                k, num_bins, fairness_mode
+                k, num_bins, graph_semantics
             )
         elif stratification_mode == 'target':
             bin_centers_eq, eq_gains = compute_equality_gain_vs_degree_by_target(
                 recs_by_u, train_edges, test_edges, degrees, num_nodes,
-                k, num_bins, fairness_mode
+                k, num_bins, graph_semantics
             )
         elif stratification_mode == 'mixed':
             bin_centers_eq, eq_gains = compute_equality_gain_vs_degree(
                 recs_by_u, train_edges, test_edges, degrees, num_nodes,
-                k, num_bins, fairness_mode
+                k, num_bins, graph_semantics
             )
         else:
             raise ValueError(f"Invalid stratification_mode: {stratification_mode}")
@@ -348,7 +348,7 @@ def compute_equality_gain_vs_degree(
     num_nodes: int,
     k: int,
     num_bins: int = 10,
-    fairness_mode: str = 'indegree'
+    graph_semantics: str = 'simple_undirected'
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute equality gain@K as a function of node degree.
@@ -364,7 +364,7 @@ def compute_equality_gain_vs_degree(
         num_nodes: Total number of nodes
         k: Cutoff value
         num_bins: Number of degree bins
-        fairness_mode: Degree counting mode
+        graph_semantics: Structural-EG graph semantics
     
     Returns:
         (bin_centers, equality_gains)
@@ -375,7 +375,7 @@ def compute_equality_gain_vs_degree(
     if deg_max == deg_min:
         # All nodes have same degree
         eq_gain, _, _ = compute_equality_gain(
-            recs_by_u, train_edges, test_edges, num_nodes, k, fairness_mode
+            recs_by_u, train_edges, test_edges, num_nodes, k, graph_semantics
         )
         return np.array([deg_min]), np.array([eq_gain])
     
@@ -404,7 +404,7 @@ def compute_equality_gain_vs_degree(
         
         # Compute equality gain for this bin
         eq_gain, _, _ = compute_equality_gain(
-            recs_bin, train_bin, test_bin, num_nodes, k, fairness_mode
+            recs_bin, train_bin, test_bin, num_nodes, k, graph_semantics
         )
         
         bin_centers.append((bins[i] + bins[i + 1]) / 2)
@@ -641,7 +641,7 @@ def analyze_degree_effects(
     num_nodes: int,
     k: int = 10,
     num_bins: int = 10,
-    fairness_mode: str = 'indegree',
+    graph_semantics: str = 'simple_undirected',
     save_dir: str = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -661,7 +661,7 @@ def analyze_degree_effects(
     print("Computing Equality Gain vs Degree...")
     bin_centers_eq, eq_gains = compute_equality_gain_vs_degree(
         recs_by_u, train_edges, test_edges, degrees, num_nodes,
-        k, num_bins, fairness_mode
+        k, num_bins, graph_semantics
     )
     
     # Print summary

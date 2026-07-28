@@ -1,0 +1,90 @@
+#!/bin/bash
+#SBATCH --job-name=egfix_finalize_selection
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32GB
+#SBATCH --time=02:00:00
+#SBATCH --output=/tmp/%x_%j.out
+
+# Strictly validate the 70 isolated sweep outputs, then apply the documented
+# Pareto + ASF rule and freeze selected_configs.csv for phase two.
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/analysis/egfix_finalize_selection.py" &&
+              -d "${candidate}/jobs/egfix" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_run_tag() {
+    local value="$1"
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] &&
+        [[ "${value}" != *".."* ]] &&
+        [[ "$(basename -- "${value}")" == "${value}" ]]
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+RUN_TAG="${EGFIX_RUN_TAG:?EGFIX_RUN_TAG was not exported by submit_selection.sh}"
+validate_run_tag "${RUN_TAG}" || {
+    echo "ERROR: unsafe EGFIX_RUN_TAG: ${RUN_TAG}" >&2
+    exit 2
+}
+CAMPAIGN="${REPO}/results_egfix/${RUN_TAG}"
+SOURCE_MANIFEST="${CAMPAIGN}/source_manifest.json"
+
+cd "${REPO}"
+python -u analysis/egfix_preflight.py \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --verify-only
+
+SUCCESS_COUNT="$(
+    find "${CAMPAIGN}/selection" -type f -name _SUCCESS -print | wc -l | tr -d ' '
+)"
+if [[ "${SUCCESS_COUNT}" != "70" ]]; then
+    echo "ERROR: expected 70 selection success markers; found ${SUCCESS_COUNT}." >&2
+    exit 1
+fi
+if [[ -e "${CAMPAIGN}/selected_configs.csv" ||
+      -e "${CAMPAIGN}/_SELECTION_COMPLETE" ]]; then
+    echo "ERROR: refusing to overwrite an already-finalized selection." >&2
+    exit 2
+fi
+
+python -u analysis/egfix_finalize_selection.py \
+    --campaign_root "${CAMPAIGN}" \
+    --source_manifest "${SOURCE_MANIFEST}"
+
+[[ -s "${CAMPAIGN}/selected_configs.csv" ]] || {
+    echo "ERROR: selection finalizer did not create selected_configs.csv." >&2
+    exit 1
+}
+(cd "${CAMPAIGN}" && sha256sum selected_configs.csv > selected_configs.sha256)
+touch "${CAMPAIGN}/_SELECTION_COMPLETE"
+
+echo "Selection frozen at ${CAMPAIGN}/selected_configs.csv"
+echo "Review it before running jobs/egfix/submit_reruns.sh."

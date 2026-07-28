@@ -20,11 +20,54 @@ class FairnessAwareLoss:
     """
     Base class for fairness-aware loss functions.
     Combines task loss (link prediction) with fairness penalty.
+
+    penalty_reduction controls how the fairness penalty is reduced over the
+    batch, RELATIVE to the base loss:
+
+      'mean' (default, historical behaviour)
+          penalty = mean over positives, while every base loss in
+          backbone/loss.py reduces with .sum(). The two terms therefore differ
+          in scale by |E+_batch| (16384 by default), so lambda_fair is divided
+          by the batch size in effect and the penalty is numerically inert
+          (measured ratio lambda_fair*penalty / base_loss ~ 1e-5..1e-4).
+
+      'sum'
+          penalty is multiplied by |E+_batch| so that BOTH terms are sums over
+          the same positives. lambda_fair then means what Eq. (8) of the paper
+          says it means: a per-example trade-off weight between the task loss
+          and the fairness penalty.
+
+    IMPORTANT: 'sum' is only meaningful when the base loss is itself
+    sum-reduced. In backbone/loss.py the AUC family (auc, hinge_auc, and the
+    weighted/adaptive variants) reduces with .sum(), but ce_loss, info_nce_loss
+    and log_rank_loss reduce with .mean(). Pairing 'sum' with a mean-reduced
+    base loss would inflate the penalty by |E+_batch| relative to a base loss
+    that was never scaled that way, so it is rejected at construction.
+
+    The default is 'mean', which leaves the historical loss formula untouched.
     """
 
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1):
+    #: base losses reachable from compute_base_loss() that reduce with .mean()
+    _MEAN_REDUCED_BASE_LOSSES = frozenset({'CE', 'InfoNCE', 'LogRank'})
+
+    def __init__(self, base_loss_name='AUC', lambda_fair=0.1,
+                 penalty_reduction='mean'):
+        if penalty_reduction not in ('mean', 'sum'):
+            raise ValueError(
+                f"penalty_reduction must be 'mean' or 'sum', got {penalty_reduction!r}")
+        if (penalty_reduction == 'sum'
+                and base_loss_name in self._MEAN_REDUCED_BASE_LOSSES):
+            raise ValueError(
+                f"penalty_reduction='sum' is incompatible with base loss "
+                f"'{base_loss_name}', which reduces with .mean() "
+                f"(backbone/loss.py). 'sum' scales the penalty by the batch "
+                f"size to match a SUM-reduced base loss; use it only with the "
+                f"AUC family (AUC, HingeAUC, ...), or leave "
+                f"penalty_reduction='mean'.")
         self.base_loss_name = base_loss_name
         self.lambda_fair = lambda_fair
+        self.penalty_reduction = penalty_reduction
+        self._warned_num_neg = False
 
     def compute_base_loss(self, pos_out, neg_out, num_neg):
         """Compute the base link prediction loss"""
@@ -57,6 +100,27 @@ class FairnessAwareLoss:
         fairness_penalty = self.compute_fairness_penalty(
             pos_edge, neg_edge, pos_out, neg_out, **kwargs
         )
+
+        if self.penalty_reduction == 'sum':
+            # Match the base loss's .sum() reduction over the same positives,
+            # so lambda_fair is a per-example weight rather than a per-batch one.
+            #
+            # NOTE: the scaling is PER POSITIVE. The AUC family sums over
+            # B * num_neg (positive, negative) comparisons, so with num_neg > 1
+            # the base loss grows with num_neg while this term does not, and the
+            # effective trade-off implied by a given lambda_fair shifts. The
+            # corrected reduction is defined for num_neg = 1; anything else
+            # needs an explicit decision on whether the fairness term is
+            # weighted per positive or per comparison.
+            if num_neg not in (1, None):
+                raise ValueError(
+                    f"penalty_reduction='sum' requires num_neg=1, got {num_neg}. "
+                    f"The penalty is scaled per POSITIVE, while the AUC base loss "
+                    f"sums over num_neg comparisons per positive, so the intended "
+                    f"trade-off would silently depend on num_neg. Using num_neg>1 "
+                    f"needs an explicit decision on whether the fairness term is "
+                    f"weighted per positive or per positive-negative comparison.")
+            fairness_penalty = fairness_penalty * pos_out.size(0)
 
         total_loss = base_loss + self.lambda_fair * fairness_penalty
 
@@ -319,6 +383,9 @@ class FairnessAwareModel(BaseModel):
 
         # Extract coreness_alpha before passing kwargs to BaseModel
         self.coreness_alpha = kwargs.pop('coreness_alpha', 1.0)
+        # 'mean' (default) reproduces the historical behaviour exactly; 'sum'
+        # matches the base loss's reduction. See FairnessAwareLoss.
+        self.penalty_reduction = kwargs.pop('penalty_reduction', 'mean')
 
         # Now call parent __init__ with ONLY the kwargs it expects
         super().__init__(num_nodes=num_nodes, **kwargs)
@@ -349,13 +416,15 @@ class FairnessAwareModel(BaseModel):
             self.fairness_loss = CorenessInverseLoss(
                 base_loss_name=kwargs['loss_func'],
                 lambda_fair=lambda_fair,
-                alpha=self.coreness_alpha
+                alpha=self.coreness_alpha,
+                penalty_reduction=self.penalty_reduction
             )
         elif fairness_method == 'mobility_boost_inproc':
             self.fairness_loss = MobilityBoostLoss(
                 base_loss_name=kwargs['loss_func'],
                 lambda_fair=lambda_fair,
-                alpha=self.coreness_alpha
+                alpha=self.coreness_alpha,
+                penalty_reduction=self.penalty_reduction
             )
         else:
             self.fairness_loss = None
@@ -573,8 +642,9 @@ class CorenessInverseLoss(FairnessAwareLoss):
     where coreness_weight = (Core(u) * Core(v))^alpha / max_product^alpha
     """
 
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0):
-        super().__init__(base_loss_name, lambda_fair)
+    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0,
+                 penalty_reduction='mean'):
+        super().__init__(base_loss_name, lambda_fair, penalty_reduction)
         self.alpha = alpha
         self.max_coreness_product = None
 
@@ -626,8 +696,9 @@ class MobilityBoostLoss(FairnessAwareLoss):
     This mirrors the post-processing mobility boost formula.
     """
 
-    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0):
-        super().__init__(base_loss_name, lambda_fair)
+    def __init__(self, base_loss_name='AUC', lambda_fair=0.1, alpha=1.0,
+                 penalty_reduction='mean'):
+        super().__init__(base_loss_name, lambda_fair, penalty_reduction)
         self.alpha = alpha
         self._mobility_cache = None  # Cache mobility weights per coreness tensor
         self._cache_id = None

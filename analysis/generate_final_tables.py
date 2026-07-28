@@ -8,6 +8,7 @@ Final Results Table Generator
            (Distribution_Fairness@10, NDKL@10)
 """
 
+import argparse
 import json
 import os
 import glob
@@ -66,15 +67,33 @@ METHOD_RENAME = {
     "Coreness Mobility Boost Inproc": "MB-In",
     "Coreness Mobility Boost Preproc": "MB-Pre",
     "Coreness Mobility Boost Postproc": "MB-Post",
+    "Fusion Only": "HLGNN+RA",
     "lightgcn": "LightGCN",
     "ssnet": "SSNet",
     "ltlp": "LTP",
     "tailsteak": "TailSteak",
 }
 
+# Weak-tie diversification (Sanz-Cruzado & Castells, RecSys'18), run as a
+# post-processor on the HL-GNN backbone.  lambda_0.0 is the method's own
+# no-re-ranking control, and it dominates every lambda > 0 point on
+# Precision/Degree EG/PageRank EG on all datasets, so a single ASF selection
+# over the full grid would silently report "no diversification at all" as the
+# baseline's operating point.  We therefore emit two rows: the control, and the
+# ASF pick over lambda > 0.
+WEAK_TIE_DIR = "weak_tie"
+WEAK_TIE_GROUP = "WeakTie"
+WEAK_TIE_CONTROL_GROUP = "WeakTie (no re-rank)"
+WEAK_TIE_CONTROL_KEY = "lambda_0.0"
+
 # ---------------------------------------------------------------------------
 # Data Extraction
 # ---------------------------------------------------------------------------
+
+def _json_files(pattern):
+    """glob.glob minus the *.partial.json checkpoint files the runners write."""
+    return sorted(p for p in glob.glob(pattern) if not p.endswith(".partial.json"))
+
 
 def safe_get_stat(stats_dict, metric_name):
     """Extract mean and std from a statistics dict. Returns (mean, std) or (NaN, NaN)."""
@@ -96,11 +115,7 @@ def safe_get_stat(stats_dict, metric_name):
 def extract_baselines(base_dir):
     """Extract baseline results (no hyperparameters) from the baselines/ folder."""
     rows = []
-    baselines_dir = os.path.join(base_dir, "baselines")
-    if not os.path.exists(baselines_dir):
-        return rows
-
-    for fpath in sorted(glob.glob(os.path.join(base_dir, "*", "baselines", "*.json"))):
+    for fpath in _json_files(os.path.join(base_dir, "*", "baselines", "*.json")):
         with open(fpath) as f:
             data = json.load(f)
 
@@ -176,6 +191,30 @@ def extract_single_method_results(fpath, data, method_group):
     return rows
 
 
+def extract_weak_tie_results(base_dir):
+    """
+    Extract the weak-tie re-ranking sweeps as two method groups: the
+    lambda = 0 control (no re-ranking, no config search) and the actual
+    re-ranking points (lambda > 0), which go through the usual Pareto/ASF
+    selection.  See the WEAK_TIE_* constants for why they are kept apart.
+    """
+    rows = []
+    for fpath in _json_files(os.path.join(base_dir, "*", WEAK_TIE_DIR, "*.json")):
+        with open(fpath) as f:
+            data = json.load(f)
+
+        for row in extract_lambda_results(fpath, data, WEAK_TIE_GROUP):
+            if row["Config_Key"] == WEAK_TIE_CONTROL_KEY:
+                row["Method_Group"] = WEAK_TIE_CONTROL_GROUP
+                row["Method_Detail"] = (
+                    f"{WEAK_TIE_CONTROL_GROUP} ({WEAK_TIE_CONTROL_KEY})"
+                )
+                row["Has_Config"] = False
+            rows.append(row)
+
+    return rows
+
+
 def extract_all_results(base_dir):
     """Walk through all subdirectories and extract results."""
     all_rows = []
@@ -202,13 +241,25 @@ def extract_all_results(base_dir):
         "cafe_in_b": "Hybrid Penalized C (Inproc)",
         "cafe_pre_b": "Hybrid Penalized C (Preproc)",
         "coreness_inverse": "Coreness Inverse Inproc",
+        "ci_in": "Coreness Inverse Inproc",
         "ci_pre": "Coreness Inverse Preproc",
         "mobility_boost": "Coreness Mobility Boost Postproc",
         "mb_post": "Coreness Mobility Boost Postproc",
+        "fusion_only": "Fusion Only",
+        # TORS tree (2026-07): the definitive CAFE-In/Pre config sweeps for
+        # the small datasets live in the sensitivity dirs (experiment (d),
+        # full lambda x beta x lam grids incl. the boost) — per the §6.4
+        # plan, configurations are re-selected from these grids. The large
+        # datasets use best_config runs in cafe_in/cafe_pre instead
+        # (jobs/tors_cafe_best_large.job). NOTE: archive the conference-era
+        # results/oklahoma/cafe_* dirs before regenerating, or the two
+        # trees will be mixed (§7 INCONSISTENCIES block, item (1)).
+        "sensitivity_in": "Hybrid Penalized D (Inproc)",
+        "sensitivity_pre": "Hybrid Penalized D (Preproc)",
     }
 
     for dirname, method_group in lambda_method_dirs.items():
-        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
+        for fpath in _json_files(os.path.join(base_dir, "*", dirname, "*.json")):
             fname = os.path.basename(fpath)
             if "best_config" in fname:
                 continue  # handled separately in aggregate_best_config_runs
@@ -237,7 +288,7 @@ def extract_all_results(base_dir):
 
     # 2b. Additional baselines in common_baselines/ and preferential_attachment/
     for extra_baselines_dir in ["common_baselines", "preferential_attachment"]:
-        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", extra_baselines_dir, "*.json"))):
+        for fpath in _json_files(os.path.join(base_dir, "*", extra_baselines_dir, "*.json")):
             with open(fpath) as f:
                 data = json.load(f)
             dataset = data["experiment_info"]["dataset"]
@@ -267,11 +318,14 @@ def extract_all_results(base_dir):
     }
 
     for dirname, method_group in single_method_dirs.items():
-        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
+        for fpath in _json_files(os.path.join(base_dir, "*", dirname, "*.json")):
             with open(fpath) as f:
                 data = json.load(f)
             rows = extract_single_method_results(fpath, data, method_group)
             all_rows.extend(rows)
+
+    # 4. Weak-tie re-ranking (two groups: lambda=0 control + lambda>0 sweep)
+    all_rows.extend(extract_weak_tie_results(base_dir))
 
     return pd.DataFrame(all_rows)
 
@@ -377,9 +431,11 @@ _BEST_CONFIG_DIRS = {
     "cafe_in_b": "Hybrid Penalized C (Inproc)",
     "cafe_pre_b": "Hybrid Penalized C (Preproc)",
     "coreness_inverse": "Coreness Inverse Inproc",
+    "ci_in": "Coreness Inverse Inproc",
     "ci_pre": "Coreness Inverse Preproc",
     "mobility_boost": "Coreness Mobility Boost Postproc",
     "mb_post": "Coreness Mobility Boost Postproc",
+    "fusion_only": "Fusion Only",
 }
 
 # HLGNN baseline config key in hybrid_analysis
@@ -395,7 +451,7 @@ def _collect_values_for_config(base_dir, dirname, config_key, target_dataset):
     Returns dict: metric_name -> list of individual values
     """
     metric_values = {}
-    for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
+    for fpath in _json_files(os.path.join(base_dir, "*", dirname, "*.json")):
         fname = os.path.basename(fpath)
         if "best_config" in fname:
             continue
@@ -427,7 +483,7 @@ def aggregate_best_config_runs(base_dir):
 
     for dirname, method_group in _BEST_CONFIG_DIRS.items():
         groups = {}  # (dataset, config_key) -> list of values per metric
-        for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*best_config*.json"))):
+        for fpath in _json_files(os.path.join(base_dir, "*", dirname, "*best_config*.json")):
             with open(fpath) as f:
                 data = json.load(f)
             dataset = data["experiment_info"]["dataset"]
@@ -527,7 +583,7 @@ def aggregate_single_method_runs(base_dir):
             combined = {}  # metric_name -> list of values
             total_runs = 0
 
-            for fpath in sorted(glob.glob(os.path.join(base_dir, "*", dirname, "*.json"))):
+            for fpath in _json_files(os.path.join(base_dir, "*", dirname, "*.json")):
                 with open(fpath) as f:
                     data = json.load(f)
                 if data.get("experiment_info", {}).get("dataset") != target_dataset:
@@ -661,13 +717,25 @@ def create_paper_table(df_best, metrics_to_show, metric_labels, output_path):
 # ---------------------------------------------------------------------------
 
 def main():
+    parser = argparse.ArgumentParser(description="Generate final CSV tables")
+    parser.add_argument("--base_dir", type=str, default=BASE_DIR,
+                        help="Root of the results tree (default: ../results)")
+    parser.add_argument("--out_dir", type=str, default=OUTPUT_DIR,
+                        help="Directory for the output CSVs (default: analysis/)")
+    cli = parser.parse_args()
+    base_dir = os.path.abspath(cli.base_dir)
+    out_dir = os.path.abspath(cli.out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+
     print("=" * 80)
     print("FINAL RESULTS TABLE GENERATOR")
+    print(f"  base_dir: {base_dir}")
+    print(f"  out_dir : {out_dir}")
     print("=" * 80)
 
     # Step 1: Extract all results
     print("\n[1/5] Extracting results from all JSON files...")
-    df = extract_all_results(BASE_DIR)
+    df = extract_all_results(base_dir)
     print(f"  Extracted {len(df)} total rows")
     print(f"  Method groups: {sorted(df['Method_Group'].unique())}")
     print(f"  Datasets: {sorted(df['Dataset'].unique())}")
@@ -679,7 +747,7 @@ def main():
 
     # Step 2b: Override with aggregated best-config runs (brightkite/pokec_n)
     print("\n[2b/5] Aggregating best-config runs for brightkite/pokec_n...")
-    df_best = apply_best_config_overrides(df_best, BASE_DIR)
+    df_best = apply_best_config_overrides(df_best, base_dir)
 
     # Apply display name mapping
     df_best["Method_Group"] = df_best["Method_Group"].replace(METHOD_RENAME)
@@ -707,7 +775,7 @@ def main():
         "PageRank EG@10",
         "Closeness EG@10",
     ]
-    table1_path = os.path.join(OUTPUT_DIR, "table1_precision_equality_gain.csv")
+    table1_path = os.path.join(out_dir, "table1_precision_equality_gain.csv")
     table1 = create_paper_table(df_best, table1_metrics, table1_labels, table1_path)
     print(f"  Saved to: {table1_path}")
 
@@ -736,7 +804,7 @@ def main():
         "PA", "pure_gnn", "random", "RA",
     ]
     df_best_table2 = df_best[~df_best["Method_Group"].isin(table2_exclude_methods)]
-    table2_path = os.path.join(OUTPUT_DIR, "table2_precision_demographic.csv")
+    table2_path = os.path.join(out_dir, "table2_precision_demographic.csv")
     table2 = create_paper_table(df_best_table2, table2_metrics, table2_labels, table2_path)
     print(f"  Saved to: {table2_path}")
 
@@ -751,7 +819,7 @@ def main():
             "Method_Detail": row.get("Method_Detail", row["Method_Group"]),
         })
     config_df = pd.DataFrame(config_rows)
-    config_path = os.path.join(OUTPUT_DIR, "best_configs.csv")
+    config_path = os.path.join(out_dir, "best_configs.csv")
     config_df.to_csv(config_path, index=False)
     print(f"  Saved to: {config_path}")
 

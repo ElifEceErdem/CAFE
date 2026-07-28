@@ -50,8 +50,7 @@ from baselines.baseline_wrapper import BaselineWrapper
 from metrics.coreness import compute_coreness
 from core.ra_features import compute_ra_scores
 from metrics.centrality_equality_gain import (
-    build_control_centrality, build_predicted_centrality,
-    compute_gini_coefficient
+    compute_degree_equality_gain_by_source_bins_for_models,
 )
 
 
@@ -655,45 +654,26 @@ def compute_eg_by_coreness_bin(all_recs, coreness_np, bin_assignments, bin_label
     Returns:
         pd.DataFrame with columns [model, coreness_bin, coreness_bin_label, equality_gain]
     """
-    train_edges_cpu = train_edges.cpu()
-    test_edges_cpu = pos_test_edge.cpu()
-
-    # Compute control centrality ONCE (same for all models & bins)
-    cent_control = build_control_centrality(
-        train_edges_cpu, test_edges_cpu, num_nodes, 'degree'
-    )
-    gini_control = compute_gini_coefficient(cent_control)
-    print(f"  Control Gini (degree): {gini_control:.4f}")
-
     rows = []
     bins = sorted(bin_labels.keys())
+    results_by_model = compute_degree_equality_gain_by_source_bins_for_models(
+        all_recs,
+        bin_assignments,
+        train_edges.cpu(),
+        pos_test_edge.cpu(),
+        num_nodes,
+        K,
+        bin_ids=bins,
+    )
 
     for model_name, recs_by_u in all_recs.items():
         print(f"\n  {model_name}:")
+        bin_results = results_by_model[model_name]
         for b in bins:
-            # Filter recs to only nodes in this bin
-            bin_nodes = {nid for nid, assigned_bin in bin_assignments.items() if assigned_bin == b}
-            bin_recs = {u: vs for u, vs in recs_by_u.items() if u in bin_nodes}
-
-            if len(bin_recs) == 0:
-                rows.append({
-                    'model': model_name,
-                    'coreness_bin': b,
-                    'coreness_bin_label': bin_labels[b],
-                    'equality_gain': 0.0,
-                })
-                continue
-
-            # Compute predicted centrality using only this bin's recs
-            cent_pred = build_predicted_centrality(
-                train_edges_cpu, bin_recs, num_nodes, K, 'degree'
+            eg, gini_control, gini_pred = bin_results[b]
+            n_sources = sum(
+                1 for u in recs_by_u if bin_assignments.get(int(u)) == b
             )
-            gini_pred = compute_gini_coefficient(cent_pred)
-
-            if gini_control == 0:
-                eg = 0.0
-            else:
-                eg = ((gini_control - gini_pred) / gini_control) * 100.0
 
             rows.append({
                 'model': model_name,
@@ -701,12 +681,69 @@ def compute_eg_by_coreness_bin(all_recs, coreness_np, bin_assignments, bin_label
                 'coreness_bin_label': bin_labels[b],
                 'equality_gain': eg,
             })
-            print(f"    Bin {bin_labels[b]}: EG={eg:.2f}% (Gini_pred={gini_pred:.4f}, n_nodes={len(bin_recs)})")
+            print(
+                f"    Bin {bin_labels[b]}: EG={eg:.2f}% "
+                f"(Gini_ctrl={gini_control:.4f}, "
+                f"Gini_pred={gini_pred:.4f}, n_sources={n_sources})"
+            )
 
     return pd.DataFrame(rows)
 
 
-def plot_stacked_barchart(prec_df, eg_df, save_dir, dataset_name, K):
+def aggregate_precision_within_runs(prec_df):
+    """Aggregate node precision to one value per run/model/coreness bin.
+
+    Run-level replication is the experimental unit.  Computing whiskers from
+    the raw node rows would treat thousands of users as independent reruns
+    (pseudo-replication) and dramatically understate uncertainty.
+    """
+    required = {
+        'model', 'coreness_bin', 'coreness_bin_label', 'precision',
+    }
+    missing = required - set(prec_df.columns)
+    if missing:
+        raise ValueError(
+            f"Precision dataframe lacks columns: {sorted(missing)}"
+        )
+
+    working = prec_df.copy()
+    if 'run' not in working.columns:
+        working['run'] = 0
+
+    return (
+        working
+        .groupby(
+            ['run', 'model', 'coreness_bin', 'coreness_bin_label'],
+            as_index=False,
+        )
+        .agg(
+            precision=('precision', 'mean'),
+            n_nodes=('node_id', 'nunique')
+            if 'node_id' in working.columns
+            else ('precision', 'count'),
+        )
+    )
+
+
+def _ordered_models(values, requested_order=None):
+    available = list(dict.fromkeys(values))
+    if requested_order is None:
+        return available
+    ordered = [name for name in requested_order if name in available]
+    ordered.extend(name for name in available if name not in ordered)
+    return ordered
+
+
+def plot_stacked_barchart(
+    prec_df,
+    eg_df,
+    save_dir,
+    dataset_name,
+    K,
+    model_order=None,
+    display_name=None,
+    filename_tag=None,
+):
     """
     Compact vertically-stacked grouped bar chart for paper figures.
 
@@ -720,8 +757,8 @@ def plot_stacked_barchart(prec_df, eg_df, save_dir, dataset_name, K):
     """
     os.makedirs(save_dir, exist_ok=True)
 
-    models_prec = list(prec_df['model'].unique())
-    models_eg = list(eg_df['model'].unique())
+    models_prec = _ordered_models(prec_df['model'].unique(), model_order)
+    models_eg = _ordered_models(eg_df['model'].unique(), model_order)
     bin_order = sorted(prec_df['coreness_bin'].unique())
 
     # Build x-tick labels from precision df
@@ -744,9 +781,12 @@ def plot_stacked_barchart(prec_df, eg_df, save_dir, dataset_name, K):
     # ------------------------------------------------------------------
     num_models_prec = len(models_prec)
     width_prec = 0.7 / max(num_models_prec, 1)
+    precision_by_run = aggregate_precision_within_runs(prec_df)
 
     for i, model_name in enumerate(models_prec):
-        model_df = prec_df[prec_df['model'] == model_name]
+        model_df = precision_by_run[
+            precision_by_run['model'] == model_name
+        ]
         grouped = model_df.groupby('coreness_bin')['precision'].agg(
             ['mean', 'std', 'count']
         )
@@ -832,11 +872,13 @@ def plot_stacked_barchart(prec_df, eg_df, save_dir, dataset_name, K):
                bbox_to_anchor=(0.5, 1.02),
                handletextpad=0.3, columnspacing=1.0)
 
-    fig.suptitle(f'{dataset_name} (K={K})', fontsize=11, fontweight='bold',
+    title = display_name if display_name is not None else dataset_name
+    fig.suptitle(f'{title} (K={K})', fontsize=11, fontweight='bold',
                  y=1.06)
 
+    output_tag = filename_tag if filename_tag is not None else dataset_name
     path = os.path.join(save_dir,
-                        f'stacked_barchart_{dataset_name}.pdf')
+                        f'stacked_barchart_{output_tag}.pdf')
     fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"  Saved: {path}")

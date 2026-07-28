@@ -1,0 +1,104 @@
+#!/bin/bash
+#SBATCH --job-name=egfix_sum_rec_pre
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16GB
+#SBATCH --time=02:00:00
+#SBATCH --output=/tmp/%x_%j.out
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/jobs/egfix_sum_recovery/provenance.py" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_run_tag() {
+    local value="$1"
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] &&
+        [[ "${value}" != *".."* ]] &&
+        [[ "$(basename -- "${value}")" == "${value}" ]]
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+RUN_TAG="${EGFIX_SUM_RUN_TAG:?EGFIX_SUM_RUN_TAG was not exported}"
+validate_run_tag "${RUN_TAG}" || {
+    echo "ERROR: unsafe EGFIX_SUM_RUN_TAG: ${RUN_TAG}" >&2
+    exit 2
+}
+CAMPAIGN="${REPO}/results_egfix/${RUN_TAG}"
+RECOVERY_MANIFEST="${CAMPAIGN}/recovery_manifest.json"
+RUNTIME_ENV="${CAMPAIGN}/hl_gnn.conda-explicit.txt"
+RUNTIME_ENV_DIGEST="${CAMPAIGN}/hl_gnn.conda-explicit.sha256"
+
+cd "${REPO}"
+python -u -m jobs.egfix_sum_recovery.provenance \
+    --campaign-root "${CAMPAIGN}" \
+    --manifest-path "${RECOVERY_MANIFEST}" \
+    --verify-only
+
+RECORDED_ENV_SHA="$(awk 'NR == 1 {print $1}' "${RUNTIME_ENV_DIGEST}")"
+[[ "$(sha256sum "${RUNTIME_ENV}" | awk '{print $1}')" == "${RECORDED_ENV_SHA}" ]] || {
+    echo "ERROR: runtime-environment snapshot digest is invalid." >&2
+    exit 2
+}
+CURRENT_ENV_SHA="$(conda list --explicit | sha256sum | awk '{print $1}')"
+[[ "${CURRENT_ENV_SHA}" == "${RECORDED_ENV_SHA}" ]] || {
+    echo "ERROR: active hl_gnn environment differs from campaign snapshot." >&2
+    exit 2
+}
+
+export MPLCONFIGDIR="/tmp/cafe-egfix-recovery-mpl-${SLURM_JOB_ID:-manual}"
+export XDG_CACHE_HOME="/tmp/cafe-egfix-recovery-cache-${SLURM_JOB_ID:-manual}"
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+python -m unittest discover -s tests -p 'test_*.py' -v
+python -m jobs.egfix_sum.tests -v
+python -m jobs.egfix_sum_recovery.tests -v
+
+# Read-only at preflight: no success marker is adopted until every missing
+# task completes and the recovery finalizer runs.
+python -u -m jobs.egfix_sum_recovery.audit_completed \
+    --campaign-root "${CAMPAIGN}" \
+    --recovery-manifest "${RECOVERY_MANIFEST}"
+
+python -u -m jobs.egfix_sum_recovery.provenance \
+    --campaign-root "${CAMPAIGN}" \
+    --manifest-path "${RECOVERY_MANIFEST}" \
+    --verify-only
+
+SUCCESS_COUNT="$(
+    find "${CAMPAIGN}/selection" -type f -name _SUCCESS -print |
+        wc -l | tr -d ' '
+)"
+[[ "${SUCCESS_COUNT}" == "16" ]] || {
+    echo "ERROR: recovery preflight expected 16 original successes; found ${SUCCESS_COUNT}." >&2
+    exit 2
+}
+
+touch "${CAMPAIGN}/_CAFE_IN_SUM_RECOVERY_PREFLIGHT_COMPLETE"
+echo "Recovery preflight passed: ${CAMPAIGN}"

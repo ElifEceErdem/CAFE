@@ -1,0 +1,63 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=160:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t04_cafe
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t04_cafe_%A_%a.out
+
+# Tables 4, 7 and 8 -- the CAFE side, at the PUBLISHED configurations.
+# Seven arms per dataset: HL-GNN backbone, CAFE^-P, fusion-only control,
+# CAFE-In^-B, CAFE-Pre^-B, CAFE-In, CAFE-Pre.
+# Array index -> dataset: 0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
+#
+# run_cafe_p.py does not accept the fast-eval flags, so it gets ${SPLIT}
+# while run_cafe.py gets ${EXTRA}.
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+BASE=${REPO}/results_repro/${DS}
+
+# CAFE^-P uses its own selected (beta, lambda_mob); see analysis/best_configs.csv
+case ${DS} in
+  ego-facebook) P_BETA=0.1; P_LAM=0.3 ;;
+  oklahoma)     P_BETA=1.0; P_LAM=0.5 ;;
+  unc)          P_BETA=2.0; P_LAM=0.5 ;;
+  pokec_n)      P_BETA=1.0; P_LAM=0.5 ;;
+  brightkite)   P_BETA=1.0; P_LAM=0.5 ;;
+esac
+
+CP_COMMON="${COMMON} --runs 10 --coreness_alpha 1.0 \
+  --use_equality_gain True --use_centrality_gain True"
+
+mkdir -p ${BASE}/cafe_p
+echo "=== HL-GNN backbone on ${DS} (beta=0, lambda_mob=0) ==="
+python -u run_cafe_p.py ${CP_COMMON} \
+    --beta_ra "0.0" --lambda_mobility "0.0" \
+    --results_file ${BASE}/cafe_p/results_cafe_p_baseline_${DS}_${TS}.json ${SPLIT}
+
+echo "=== CAFE^-P on ${DS} (beta=${P_BETA}, lambda_mob=${P_LAM}) ==="
+python -u run_cafe_p.py ${CP_COMMON} \
+    --beta_ra "${P_BETA}" --lambda_mobility "${P_LAM}" \
+    --results_file ${BASE}/cafe_p/results_cafe_p_${DS}_${TS}.json ${SPLIT}
+
+run_cafe () {  # $1=mode $2=penalty $3=beta $4=lambda_mob $5=boost $6=outdir
+  mkdir -p ${BASE}/$6
+  echo "=== $6 on ${DS} ==="
+  python -u run_cafe.py ${COMMON} --runs 10 \
+      --penalization_mode $1 --use_mobility_boost $5 \
+      --lambda_fair "$2" --beta_ra "$3" --lambda_mobility "$4" \
+      --coreness_alpha 1.0 ${EG} \
+      --results_file ${BASE}/$6/results_$6_${DS}_${TS}.json ${EXTRA}
+}
+
+run_cafe inproc  0.0      "0.1,0.5,1.0,2.0,5.0" 0.0        False fusion_only
+run_cafe inproc  ${IN_LF} ${IN_BETA}            0.0        False cafe_in_b
+run_cafe preproc ${PRE_A} ${PRE_BETA}           0.0        False cafe_pre_b
+run_cafe inproc  ${IN_LF} ${IN_BETA}            ${IN_LAM}  True  cafe_in
+run_cafe preproc ${PRE_A} ${PRE_BETA}           ${PRE_LAM} True  cafe_pre
+
+echo "Done."

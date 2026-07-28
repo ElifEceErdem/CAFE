@@ -184,7 +184,7 @@ class BaseModel(object):
 
     @torch.no_grad()
     def test(self, data, split_edge, batch_size, evaluator, eval_metric, fairness_mode='indegree',
-             eval_chunk_size=1024, eval_batch_cands=4096):
+             eval_chunk_size=1024, eval_batch_cands=4096, skip_test_eval=False, max_eval_nodes=0):
         """
         UPDATED: Fairness matches PULL/Bloom implementation
         - Only evaluates on TEST NODES (not all nodes)
@@ -200,16 +200,35 @@ class BaseModel(object):
         mean_h = torch.mean(h, dim=0, keepdim=True)  # unseen node embedding
         h = torch.cat([h, mean_h], dim=0)
 
-        # ----- Edges & predictions -----
+        # ----- Validation edges -----
         pos_valid_edge, neg_valid_edge = get_pos_neg_edges('valid', split_edge)
-        pos_test_edge,  neg_test_edge  = get_pos_neg_edges('test',  split_edge)
         pos_valid_edge, neg_valid_edge = pos_valid_edge.to(self.device), neg_valid_edge.to(self.device)
-        pos_test_edge,  neg_test_edge  = pos_test_edge.to(self.device),  neg_test_edge.to(self.device)
+        validation_only = eval_metric == 'precision10' and skip_test_eval
 
-        pos_valid_pred = self.batch_predict(h, pos_valid_edge, batch_size)
-        neg_valid_pred = self.batch_predict(h, neg_valid_edge, batch_size)
-        pos_test_pred  = self.batch_predict(h, pos_test_edge,  batch_size)
-        neg_test_pred  = self.batch_predict(h, neg_test_edge,  batch_size)
+        # Configuration selection must not merely ignore a computed test
+        # value: it must avoid reading/scoring test edges altogether.
+        if not validation_only:
+            pos_test_edge, neg_test_edge = get_pos_neg_edges(
+                'test', split_edge
+            )
+            pos_test_edge, neg_test_edge = (
+                pos_test_edge.to(self.device),
+                neg_test_edge.to(self.device),
+            )
+
+            # ----- Edge predictions -----
+            pos_valid_pred = self.batch_predict(
+                h, pos_valid_edge, batch_size
+            )
+            neg_valid_pred = self.batch_predict(
+                h, neg_valid_edge, batch_size
+            )
+            pos_test_pred = self.batch_predict(
+                h, pos_test_edge, batch_size
+            )
+            neg_test_pred = self.batch_predict(
+                h, neg_test_edge, batch_size
+            )
 
         # ----- Ranks from pos/neg scores -----
         def make_ranks(pos_scores, neg_scores):
@@ -220,8 +239,9 @@ class BaseModel(object):
             ranks = 1 + (neg_scores > pos_scores.view(-1, 1)).sum(dim=1)
             return ranks, M
 
-        ranks_v, Mv = make_ranks(pos_valid_pred, neg_valid_pred)
-        ranks_t, Mt = make_ranks(pos_test_pred,  neg_test_pred)
+        if not validation_only:
+            ranks_v, Mv = make_ranks(pos_valid_pred, neg_valid_pred)
+            ranks_t, Mt = make_ranks(pos_test_pred, neg_test_pred)
 
         # ----- Metric helpers -----
         def hits_at_k(ranks, k):      
@@ -247,6 +267,12 @@ class BaseModel(object):
             """
             B, D = u_emb.size(0), u_emb.size(1)
             N = all_emb.size(0)
+            # Cap pairs per predictor call: u_rep/v_rep and the MLP
+            # intermediates each materialize [B*C, D] floats, so B*C must be
+            # bounded by memory, not by candidate count alone (B=1024 x
+            # C=4096 needs ~12 GB and OOMs on 12 GB GPUs).
+            max_pairs = 1 << 19
+            batch_cands = max(1, min(batch_cands, max_pairs // max(B, 1)))
             out = []
             for c0 in range(0, N, batch_cands):
                 c1 = min(c0 + batch_cands, N)
@@ -260,7 +286,8 @@ class BaseModel(object):
             return torch.cat(out, dim=1)                       # [B, N]
 
 
-        def traditional_precision_at_k(h_emb, train_edges, test_edges, k, chunk_size=eval_chunk_size):
+        def traditional_precision_at_k(h_emb, train_edges, test_edges, k, chunk_size=eval_chunk_size,
+                                       max_nodes=0):
             """
             Optimized Traditional Recommendation Precision@K.
             
@@ -302,6 +329,13 @@ class BaseModel(object):
             )
             eval_nodes = eval_nodes[eval_nodes < n].numpy()
             eval_nodes_sorted = np.sort(eval_nodes)
+
+            # Fixed-seed subsample so every eval during a training run scores
+            # the same node subset (selection signal stays comparable).
+            if max_nodes and len(eval_nodes_sorted) > max_nodes:
+                rng = np.random.RandomState(12345)
+                eval_nodes_sorted = np.sort(
+                    rng.choice(eval_nodes_sorted, size=max_nodes, replace=False))
             
             # Build test-edge lookup as sparse CSR for vectorized hit counting
             te_np = test_edges_cpu.numpy()
@@ -560,9 +594,15 @@ class BaseModel(object):
             h_clean = h[:-1]
             train_edges = split_edge['train']['edge'].to(self.device)
             print("\n  === Validation P@10 ===", flush=True)
-            val_prec = traditional_precision_at_k(h_clean, train_edges, pos_valid_edge, 10)
-            print("  === Test P@10 ===", flush=True)
-            test_prec = traditional_precision_at_k(h_clean, train_edges, pos_test_edge, 10)
+            val_prec = traditional_precision_at_k(h_clean, train_edges, pos_valid_edge, 10,
+                                                  max_nodes=max_eval_nodes)
+            if validation_only:
+                test_prec = float('nan')
+            else:
+                print("  === Test P@10 ===", flush=True)
+                test_prec = traditional_precision_at_k(
+                    h_clean, train_edges, pos_test_edge, 10
+                )
             results['Precision@10'] = (val_prec, test_prec)
             return results
 

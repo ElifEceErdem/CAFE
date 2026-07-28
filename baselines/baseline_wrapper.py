@@ -247,7 +247,7 @@ class BaselineWrapper:
         elif baseline_type == 'lba':
             self.model = LinkBiasAmplification(
                 num_nodes=num_nodes,
-                num_features=kwargs.get('num_node_feats', 0) if kwargs.get('num_node_feats', 0) > 0 else num_nodes,
+                num_features=kwargs.get('num_node_feats', 0) if (kwargs.get('use_node_feats', True) and kwargs.get('num_node_feats', 0) > 0) else num_nodes,
                 hidden_dim=kwargs.get('gnn_hidden_channels', 128),
                 out_dim=kwargs.get('embedding_dim', 64),
                 num_layers=kwargs.get('gnn_num_layers', 4),
@@ -453,7 +453,7 @@ class BaselineWrapper:
                 raise ValueError("LBA requires sens_attr (sensitive attributes)")
             print(f"\n[LBA] Training LinkBiasAmplification for {epochs} epochs...")
             features = getattr(data, 'x', None)
-            if features is None:
+            if features is None or not self.kwargs.get('use_node_feats', True):
                 features = torch.eye(self.num_nodes, device=self.device)
             labels = getattr(data, 'y', None)
             
@@ -477,8 +477,18 @@ class BaselineWrapper:
             print(f"\n[TAILSTEAK] Training dual-stage TailSTEAK for {epochs} epochs...")
             features = getattr(data, 'x', None)
             if features is None:
-                features = torch.eye(self.num_nodes, device=self.device)
-            
+                # TailSTEAK ignores these input features entirely: forward()
+                # overwrites x/ssl_x with its Node2Vec-initialised self.id_emb
+                # ([num_nodes, in_channels]). The SocLoader only uses node_feat
+                # for its num_nodes = node_feat.size(0) inference and to slice
+                # node_feat[n_id] in the debias collate -- a slice that is built,
+                # moved to device, then discarded. A dense eye(num_nodes) makes
+                # that unused slice [batch, num_nodes]; on Brightkite (58k nodes)
+                # it is ~80 GB and OOMs the CPU. A [num_nodes, 1] placeholder
+                # keeps both uses correct at negligible cost and is numerically
+                # identical (the slice is never read by the model).
+                features = torch.zeros((self.num_nodes, 1), device=self.device)
+
             from baselines.tailsteak_dataloader import SocLoader
             graph_info = {
                 'base_graph': [split_edge['train']['edge'].cpu().tolist()],

@@ -1,7 +1,91 @@
-data/SNAP/brightkite/
-data/SNAP/pokec_n/
-data/SNAP/pokec_z/
-data/SNAP/facebook/
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---------------------------------------------------------------------------
+# Datasets
+# Large graphs are downloaded/prepared by the loader rather than committed.
+# ---------------------------------------------------------------------------
+data/SNAP/*
+
+# ---------------------------------------------------------------------------
+# Job scripts
+# The canonical, table-indexed suite lives in experiments/jobs/ and IS tracked.
+# The historical top-level jobs/ tree is cluster-specific scratch plus hundreds
+# of megabytes of Slurm logs; only the egfix campaign definitions are kept.
+# ---------------------------------------------------------------------------
+/jobs/*
+!/jobs/egfix/
+!/jobs/egfix/**
+!/jobs/egfix_sum*/
+!/jobs/egfix_sum*/**
+/jobs/egfix*/logs/
+/jobs/**/logs/
+
+# ---------------------------------------------------------------------------
+# Experiment output
+#
+# Raw result trees are reproducible from experiments/jobs/ and far too large to
+# version.  The GENERATED TABLES are the artifacts worth tracking, so
+# results_repro/tables/ is explicitly re-included below.
+# ---------------------------------------------------------------------------
+/results/
+/results_repro/*
+!/results_repro/tables/
+/results_egfix/
+/results_penalty_reduction/
+/results_pen_smoke/
+/results_random_split_archive/
+/results_verify/
+/logs/
+**/slurm-*.out
+
+# Keep the tables, but not the multi-megabyte PDFs regenerated on every build.
+/results_repro/tables/*.pdf
+
+# ---------------------------------------------------------------------------
+# Analysis intermediates
+#
+# Per-node CSVs run to tens of megabytes and are byproducts of the campaigns in
+# experiments/jobs/.  The small per-bin/summary CSVs next to them are kept:
+# they are what the table generators actually read.
+# ---------------------------------------------------------------------------
+analysis/plots/**/stratified_cafe_*.csv
+analysis/plots/**/exposure_per_node_*.csv
+analysis/plots/**/*_raw.csv
+analysis/plots/**/*.pdf
+
+# Written by generate_final_tables.py against whichever tree was aggregated
+# last, so they go stale silently.  results_repro/tables/ is authoritative.
 analysis/table1_precision_equality_gain.csv
 analysis/table2_precision_demographic.csv
-jobs
+analysis/best_configs.csv
+
+# ---------------------------------------------------------------------------
+# Manuscript
+# Sources are tracked; build products and the compiled PDF are not.
+# ---------------------------------------------------------------------------
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Slurm output for the table suite (recreated on submit)
+experiments/jobs/logs/

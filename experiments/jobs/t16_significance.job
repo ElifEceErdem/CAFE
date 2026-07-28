@@ -1,0 +1,37 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=166:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t16_sig
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t16_significance_%A_%a.out
+
+# Table 16 (and the DeltaSP/DeltaEO half of Table 17): the SPLIT-RESAMPLED
+# paired protocol -- each seed draws its own train/val/test partition, so
+# method differences are paired within split.
+#
+# Brightkite keeps its fixed temporal cut (--vary_split False); resampling it
+# would destroy the proxy-temporal ordering the dataset is evaluated under.
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+
+VARY=True
+if [ "${DS}" = "brightkite" ]; then VARY=False; fi
+
+OUT=${REPO}/results_repro/${DS}/significance
+mkdir -p ${OUT}
+
+python -u run_significance.py ${COMMON} \
+    --num_seeds 10 --seed_start 0 --vary_split ${VARY} \
+    --cafe_in_lambda ${IN_LF} --cafe_in_beta ${IN_BETA} --cafe_in_lam ${IN_LAM} \
+    --cafe_pre_alpha ${PRE_A} --cafe_pre_beta ${PRE_BETA} --cafe_pre_lam ${PRE_LAM} \
+    --fusion_beta ${FUSION_BETA} \
+    --use_demographics True \
+    --centrality_types pagerank,closeness \
+    --out_csv ${OUT}/per_seed_metrics_${DS}.csv ${EXTRA}
+
+echo "Done."

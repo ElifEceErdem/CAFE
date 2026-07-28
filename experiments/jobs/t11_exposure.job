@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=166:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t11_expo
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t11_exposure_%A_%a.out
+
+# One training pass, two artifacts:
+#   Table 11  acceptance-robust EG (full / PW / TP)  -> results/{ds}/acceptance_eg/
+#   Table 6b  target-coreness exposure audit         -> analysis/plots/coreness_by_group/
+#
+# The exposure block used to be skipped on datasets without a sensitive
+# attribute, which is why the draft marks the audit unavailable on Ego-FB and
+# Brightkite. That gate is gone; array tasks 0 and 4 now complete Table 6b.
+#
+# The fusion arm deliberately uses CAFE-In's beta (matched-beta control), so on
+# pokec_n it does NOT equal the independently tuned HL-GNN+RA row of Table 4.
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+
+mkdir -p ${REPO}/results/${DS}/acceptance_eg
+mkdir -p ${REPO}/analysis/plots/coreness_by_group
+
+python -u run_exposure_acceptance.py ${COMMON} \
+    --runs 10 --K 10 \
+    --cafe_in_lambda ${IN_LF} --cafe_in_beta ${IN_BETA} --cafe_in_lam ${IN_LAM} \
+    --cafe_pre_alpha ${PRE_A} --cafe_pre_beta ${PRE_BETA} --cafe_pre_lam ${PRE_LAM} \
+    --fusion_beta ${IN_BETA} \
+    --use_sampling_closeness True \
+    --tercile_closure left \
+    --acceptance_csv ${REPO}/results/${DS}/acceptance_eg/acceptance_eg_${DS}.csv \
+    --exposure_dir ${REPO}/analysis/plots/coreness_by_group ${EXTRA}
+
+echo "Done."

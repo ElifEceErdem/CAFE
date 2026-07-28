@@ -1,0 +1,30 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --exclusive
+#SBATCH --mem=32GB
+#SBATCH --time=100:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t12_rt
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t12_runtime_%A_%a.out
+
+# Table 12 -- wall-clock runtime. --exclusive is not optional: sharing the GPU
+# inflates the training column and invalidates the 1.00x / 1.02-1.07x overhead
+# claims of Section 5.5. The published pokec_n row (8540 +/- 16 s) does not
+# match the current JSON (8797 +/- 351 s, visibly bimodal), which is what
+# contended timing looks like.
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+
+mkdir -p ${REPO}/results/${DS}/runtime
+
+python -u run_runtime_benchmark.py ${COMMON} \
+    --runs 10 --rec_k 10 \
+    --cafe_in_lambda ${IN_LF} --cafe_pre_alpha ${PRE_A} \
+    --cafe_beta ${IN_BETA} --cafe_lam ${IN_LAM} \
+    --out_json ${REPO}/results/${DS}/runtime/runtime_${DS}.json ${SPLIT}
+
+echo "Done."

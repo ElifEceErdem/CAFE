@@ -98,7 +98,9 @@ def train_inprocessing_model(model, data, split_edge, args, degrees, patience=50
                 eval_metric='precision10',
                 fairness_mode=args.fairness_mode,
                 eval_chunk_size=getattr(args, 'eval_chunk_size', 1024),
-                eval_batch_cands=getattr(args, 'eval_batch_cands', 4096)
+                eval_batch_cands=getattr(args, 'eval_batch_cands', 4096),
+                skip_test_eval=getattr(args, 'eval_skip_test', False),
+                max_eval_nodes=getattr(args, 'eval_max_nodes', 0)
             )
 
             val_score = results[metric_name][0]
@@ -165,11 +167,19 @@ def train_inprocessing_model(model, data, split_edge, args, degrees, patience=50
         print(f"\n Loaded best model from epoch {best_epoch}")
         print(f" Best validation {metric_name}: {best_val_score:.4f}")
 
-    # Comprehensive evaluation at best epoch
-    print(f"\n{'='*80}")
-    print("COMPREHENSIVE EVALUATION AT BEST EPOCH")
-    print(f"{'='*80}")
-
-    final_results = compute_baseline_metrics(model, data, split_edge, args)
+    # Most callers historically requested a comprehensive test-set report
+    # here.  Sweep/analysis runners discard that report and evaluate their
+    # own held-out split afterwards; allowing them to skip it both avoids a
+    # large duplicate computation and, critically, keeps validation-only
+    # configuration selection from touching the final test metrics.
+    if getattr(args, 'skip_final_comprehensive_eval', False):
+        print("\nSkipping comprehensive post-training evaluation "
+              "(caller will evaluate the requested held-out split).")
+        final_results = {}
+    else:
+        print(f"\n{'='*80}")
+        print("COMPREHENSIVE EVALUATION AT BEST EPOCH")
+        print(f"{'='*80}")
+        final_results = compute_baseline_metrics(model, data, split_edge, args)
 
     return model, best_epoch, final_results

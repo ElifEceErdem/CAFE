@@ -141,6 +141,21 @@ def argument():
                        help='Alpha exponent for coreness-based methods')
     parser.add_argument('--lambda_fair', type=str, default='0.1',
                        help='Fairness penalty strength (comma-separated for multiple values)')
+    parser.add_argument('--penalty_reduction', type=str, default='mean',
+                       choices=['mean', 'sum'],
+                       help="Batch reduction of the in-processing fairness penalty "
+                            "relative to the base loss (the default AUC base loss sums). "
+                            "'mean' (default) = historical behaviour, penalty is "
+                            "~|E+_batch| times smaller than the base loss; "
+                            "'sum' = both terms reduce identically, so lambda_fair "
+                            "is a per-example weight. Ignored for preproc methods.")
+    parser.add_argument('--reset_seed_per_model', type=str2bool, default=False,
+                       help="Re-seed with (seed + run_index) immediately before "
+                            "constructing every model, so each (run, lambda) starts "
+                            "from an identical RNG state. Required for paired "
+                            "comparisons across separately launched arms. Default "
+                            "False preserves the historical protocol, in which one "
+                            "RNG stream evolves across lambdas and runs.")
     parser.add_argument('--pa_agg', type=str, default='product',
                        choices=['product', 'sum', 'max', 'log_product'],
                        help='PA score aggregation method')
@@ -253,6 +268,16 @@ def main():
             print(f"TRAINING BASELINE (lambda=0)")
             print(f"{'-'*80}")
 
+            # OPT-IN (see run_cafe.py): re-seed before every model so each
+            # (run, lambda) starts from an identical RNG state and paired
+            # comparisons across arms remain valid. Default False keeps the
+            # historical single evolving RNG stream.
+            if args.reset_seed_per_model:
+                model_seed = args.seed + run
+                set_seed(model_seed)
+                print(f"[seed] model seed = {model_seed} "
+                      f"(args.seed={args.seed} + run={run})")
+
             baseline_model = FairnessAwareModel(
                 fairness_method='none',
                 lambda_fair=0.0,
@@ -318,6 +343,12 @@ def main():
                 effective_method = args.fairness_method
                 original_adj_t = None
 
+            if args.reset_seed_per_model:
+                model_seed = args.seed + run
+                set_seed(model_seed)
+                print(f"[seed] model seed = {model_seed} "
+                      f"(args.seed={args.seed} + run={run})")
+
             fairness_model = FairnessAwareModel(
                 fairness_method=effective_method,
                 lambda_fair=current_fair,
@@ -343,7 +374,8 @@ def main():
                 pretrain_emb=args.pretrain_emb,
                 alpha=args.alpha,
                 init=args.init,
-                coreness_alpha=args.coreness_alpha
+                coreness_alpha=args.coreness_alpha,
+                penalty_reduction=args.penalty_reduction
             )
             fairness_model.param_init()
 
@@ -472,7 +504,6 @@ def main():
                     num_nodes=num_nodes,
                     k=10,
                     num_bins=10,
-                    fairness_mode=args.fairness_mode,
                     save_dir=degree_plot_dir
                 )
 

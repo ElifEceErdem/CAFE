@@ -607,6 +607,7 @@ def create_experiment_info(args, method_name):
         'predictor': getattr(args, 'predictor', 'N/A'),  # <- Add default
         'fairness_method': method_name,
         'fairness_mode': args.fairness_mode,
+        'eg_graph_semantics': 'simple_undirected_set_union',
         'num_runs': args.runs,
         'epochs': getattr(args, 'epochs', 0),  # <- Add default
         'batch_size': getattr(args, 'batch_size', 0),  # <- Add default
@@ -616,6 +617,18 @@ def create_experiment_info(args, method_name):
     # Add baseline-specific info if applicable
     if hasattr(args, 'baseline'):
         info['baseline_model'] = args.baseline
+
+    # Only runners that actually expose --penalty_reduction implement the
+    # per-model reseeding rule below. Recording these unconditionally would
+    # stamp a false seed_rule onto every other experiment's results.
+    if hasattr(args, 'penalty_reduction'):
+        info['penalty_reduction'] = args.penalty_reduction
+        info['num_neg'] = getattr(args, 'num_neg', None)
+        # seed_rule describes the OPT-IN per-model reseeding only; without the
+        # flag the runner keeps one evolving RNG stream and no rule applies.
+        if getattr(args, 'reset_seed_per_model', False):
+            info['seed_base'] = getattr(args, 'seed', None)
+            info['seed_rule'] = 'model_seed = seed_base + run_index'
     
     # Add PA-aware and NDKL info if enabled
     if getattr(args, 'use_pa_aware', False):

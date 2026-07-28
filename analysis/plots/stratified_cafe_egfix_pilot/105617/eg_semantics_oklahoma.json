@@ -1,0 +1,23 @@
+{
+  "K": 10,
+  "aggregate_stratum_degree_abs_diff": 0.0,
+  "cached_multibin_max_abs_diff": 0.0,
+  "cached_stratum_degree_abs_diff": 0.0,
+  "dataset": "oklahoma",
+  "degree_eg": 9.991589568879531,
+  "degree_gini_control": 0.4581030607223511,
+  "degree_gini_predicted": 0.4123312830924988,
+  "graph_semantics": "simple_undirected_set_union",
+  "num_eval_users": 2590,
+  "num_nodes": 3076,
+  "num_observed_edges_simple": 69569,
+  "num_predicted_edges_simple": 81762,
+  "num_recommendation_edges_simple": 19516,
+  "num_recommendation_events": 25900,
+  "num_train_edges_simple": 62246,
+  "orientation_degree_abs_diff": 0.0,
+  "pagerank_eg": 8.023838438469461,
+  "pagerank_gini_control": 0.34107961612294624,
+  "pagerank_gini_predicted": 0.3137119387786892,
+  "seed": 42
+}

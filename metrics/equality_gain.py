@@ -8,6 +8,25 @@ predicted vs control (observed) graphs.
 import torch
 from typing import Dict, List, Tuple
 
+from metrics.graph_utils import (
+    build_control_edge_set,
+    build_predicted_edge_set,
+    degree_from_simple_undirected_edges,
+)
+
+
+SIMPLE_UNDIRECTED = 'simple_undirected'
+
+
+def _require_simple_undirected(graph_semantics: str) -> None:
+    """Reject exposure-oriented directed modes at the structural-EG API."""
+    if graph_semantics != SIMPLE_UNDIRECTED:
+        raise ValueError(
+            "Degree Equality Gain is defined on a simple undirected graph; "
+            f"got graph_semantics={graph_semantics!r}. Directed indegree/"
+            "outdegree belongs to the separate exposure metrics."
+        )
+
 
 def compute_gini_coefficient(degrees: torch.Tensor) -> float:
     """
@@ -40,64 +59,41 @@ def compute_gini_coefficient(degrees: torch.Tensor) -> float:
     return float(gini)
 
 
-def _vectorized_degree_count(edges: torch.Tensor, num_nodes: int, mode: str = 'indegree') -> torch.Tensor:
-    """Vectorized degree counting from edge tensor."""
-    edges_cpu = edges.cpu()
-    degrees = torch.zeros(num_nodes, dtype=torch.float32)
-
-    if mode in ['indegree', 'total']:
-        dst = edges_cpu[:, 1].long()
-        valid = (dst >= 0) & (dst < num_nodes)
-        degrees.scatter_add_(0, dst[valid], torch.ones(valid.sum(), dtype=torch.float32))
-
-    if mode in ['outdegree', 'total']:
-        src = edges_cpu[:, 0].long()
-        valid = (src >= 0) & (src < num_nodes)
-        degrees.scatter_add_(0, src[valid], torch.ones(valid.sum(), dtype=torch.float32))
-
-    return degrees
-
-
 def build_predicted_degree_distribution(
     train_edges: torch.Tensor,
     recs_by_u: Dict[int, List[int]],
     num_nodes: int,
     k: int,
-    mode: str = 'indegree'
+    graph_semantics: str = SIMPLE_UNDIRECTED,
 ) -> torch.Tensor:
     """
-    Build degree distribution for predicted graph (training + recommendations).
-    Vectorized implementation.
+    Build degree on the simple undirected graph ``E_train ∪ Rec_K``.
+
+    Structural Degree EG is distinct from the directed target-exposure
+    metrics. Passing a directed mode is rejected rather than silently
+    reinterpreted.
     """
-    # Training edge degrees (vectorized)
-    degrees = _vectorized_degree_count(train_edges, num_nodes, mode)
-
-    # Recommendation edges -- build tensor then vectorize
-    rec_src, rec_dst = [], []
-    for u, vs in recs_by_u.items():
-        topk = vs[:k]
-        rec_src.extend([u] * len(topk))
-        rec_dst.extend(topk)
-
-    if rec_src:
-        rec_edges = torch.tensor([rec_src, rec_dst], dtype=torch.long).t()
-        degrees += _vectorized_degree_count(rec_edges, num_nodes, mode)
-
-    return degrees
+    _require_simple_undirected(graph_semantics)
+    predicted_edges = build_predicted_edge_set(
+        train_edges, recs_by_u, num_nodes, k
+    )
+    return degree_from_simple_undirected_edges(predicted_edges, num_nodes)
 
 
 def build_control_degree_distribution(
     train_edges: torch.Tensor,
     test_edges: torch.Tensor,
     num_nodes: int,
-    mode: str = 'indegree'
+    graph_semantics: str = SIMPLE_UNDIRECTED,
 ) -> torch.Tensor:
     """
-    Build degree distribution for control graph (training + observed test edges).
-    Vectorized implementation.
+    Build degree on the simple undirected graph ``E_train ∪ E_test``.
+
+    See :func:`build_predicted_degree_distribution`.
     """
-    all_edges = torch.cat([train_edges.cpu(), test_edges.cpu()], dim=0)
-    return _vectorized_degree_count(all_edges, num_nodes, mode)
+    _require_simple_undirected(graph_semantics)
+    control_edges = build_control_edge_set(train_edges, test_edges, num_nodes)
+    return degree_from_simple_undirected_edges(control_edges, num_nodes)
 
 
 def compute_equality_gain(
@@ -106,7 +102,7 @@ def compute_equality_gain(
     test_edges: torch.Tensor,
     num_nodes: int,
     k: int,
-    mode: str = 'indegree'
+    graph_semantics: str = SIMPLE_UNDIRECTED,
 ) -> Tuple[float, float, float]:
     """
     Compute Equality Gain metric.
@@ -119,20 +115,23 @@ def compute_equality_gain(
         test_edges: Test edges
         num_nodes: Total number of nodes
         k: Number of recommendations to use
-        mode: Degree counting mode
+        graph_semantics: Must be ``"simple_undirected"``. Directed modes are
+            intentionally rejected because they describe exposure, not the
+            post-recommendation graph in the paper.
     
     Returns:
         (equality_gain, gini_control, gini_pred)
     """
+    _require_simple_undirected(graph_semantics)
     # Build control distribution (train + observed test)
     deg_control = build_control_degree_distribution(
-        train_edges, test_edges, num_nodes, mode
+        train_edges, test_edges, num_nodes, graph_semantics
     )
     gini_control = compute_gini_coefficient(deg_control)
     
     # Build predicted distribution (train + recommendations)
     deg_pred = build_predicted_degree_distribution(
-        train_edges, recs_by_u, num_nodes, k, mode
+        train_edges, recs_by_u, num_nodes, k, graph_semantics
     )
     gini_pred = compute_gini_coefficient(deg_pred)
     
@@ -151,7 +150,7 @@ def compute_equality_gain_metrics(
     test_edges: torch.Tensor,
     num_nodes: int,
     k_values: List[int] = None,
-    fairness_mode: str = 'indegree'
+    graph_semantics: str = SIMPLE_UNDIRECTED,
 ) -> Dict[str, Tuple[float, float]]:
     """
     Compute Equality Gain for multiple K values.
@@ -162,13 +161,14 @@ def compute_equality_gain_metrics(
         test_edges: Test edges
         num_nodes: Total number of nodes
         k_values: List of K values
-        fairness_mode: Degree counting mode
+        graph_semantics: Must be ``"simple_undirected"``.
     
     Returns:
         dict: {f'Equality_Gain@{k}': (0.0, value)}
     """
     if k_values is None:
         k_values = [10, 20, 50, 100]
+    _require_simple_undirected(graph_semantics)
     
     results = {}
     
@@ -178,13 +178,13 @@ def compute_equality_gain_metrics(
     
     # Cache control distribution (same for all k values)
     deg_control = build_control_degree_distribution(
-        train_edges, test_edges, num_nodes, fairness_mode
+        train_edges, test_edges, num_nodes
     )
     gini_ctrl = compute_gini_coefficient(deg_control)
 
     for k in k_values:
         deg_pred = build_predicted_degree_distribution(
-            train_edges, recs_by_u, num_nodes, k, fairness_mode
+            train_edges, recs_by_u, num_nodes, k
         )
         gini_pred = compute_gini_coefficient(deg_pred)
 

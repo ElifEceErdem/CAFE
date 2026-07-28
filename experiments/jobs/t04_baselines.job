@@ -1,0 +1,45 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=160:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t04_base
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t04_baselines_%A_%a.out
+
+# Table 4 -- every non-CAFE row: heuristics (random/PA/CN/AA/RA), LightGCN,
+# SSNet, Cross-Link Bias, LTLP, TailSTEAK, plus FairAdj / LBA / MORAL on the
+# attribute datasets (Table 8).
+#
+# run_baselines.py takes neither --predictor/--lr/--patience/--eval_steps nor
+# the fast-eval flags, and --results_dir is the TREE ROOT, not a per-dataset
+# directory. Trained baselines run 300 epochs; each keeps its own default lr
+# (MORAL pinned to 3e-4 inside the registry).
+#
+# FairAdj and LBA build N x N identity features, so pokec_n needs a
+# large-memory GPU:
+#   sbatch --constraint=TitanRTX --array=3 t04_baselines.job
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+
+METHODS="random,pa,cn,aa,ra,lightgcn,ssnet,cross_link_bias,ltlp,tailsteak"
+if [ "${DS}" = "oklahoma" ] || [ "${DS}" = "unc" ] || [ "${DS}" = "pokec_n" ]; then
+  METHODS="${METHODS},fairadj,lba,moral"
+fi
+
+mkdir -p ${REPO}/results_repro/${DS}
+
+python -u run_baselines.py \
+    --data_name ${DS} --data_path ${DATA} \
+    --encoder HLGNN \
+    --methods "${METHODS}" \
+    --runs 10 --seed 42 \
+    --epochs 300 --batch_size 16384 \
+    --use_equality_gain True --use_centrality_gain True \
+    --centrality_types pagerank,closeness \
+    --results_dir ${REPO}/results_repro ${SPLIT}
+
+echo "Done."

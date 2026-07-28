@@ -1129,7 +1129,9 @@ class MORAL(nn.Module):
                         u_batch = torch.full_like(v_batch, u_int)
                         edge_idx = torch.stack([u_batch, v_batch], dim=0)  # [2, B]
                         logits = predictor(emb, edge_idx)
-                        scores[local_idx, v_batch.cpu().numpy()] = logits.cpu()
+                        # `scores` lives on self.device; scattering a CPU copy
+                        # into it only worked when self.device was itself CPU.
+                        scores[local_idx, v_batch] = logits
 
             # Mask self-loops
             scores[range(len(chunk)), chunk_arr] = float('-inf')
@@ -1191,9 +1193,12 @@ def train_moral(base_model, data, split_edge, args, node_categories=None, target
 
     num_nodes = data.num_nodes
 
-    # Build sparse adjacency tensor
+    # Build sparse adjacency tensor. The values must live on the same device as
+    # the indices: callers that keep `data` on the GPU (run_baselines.py) would
+    # otherwise hit a cuda/cpu mismatch here. MORAL.__init__ moves the resulting
+    # tensors to its own device afterwards.
     idx = data.edge_index
-    val = torch.ones(idx.size(1))
+    val = torch.ones(idx.size(1), device=idx.device)
     adj = torch.sparse_coo_tensor(idx, val, (num_nodes, num_nodes)).coalesce()
 
     # Features
@@ -2120,30 +2125,92 @@ def fairadj_project_sparse(indices, values, num_rows, device):
     device: torch device
 
     Returns: projected values [nnz] with same ordering as input
+
+    Vectorised over rows: the previous implementation looped over num_rows in
+    Python, which costs ~73 s per call at pokec_n scale (66569 rows, 1.1M nnz)
+    -- ~16 h per 10-run experiment, and worse on GPU where each row becomes its
+    own set of kernel launches. This computes all rows in one segmented pass.
     """
     row_indices = indices[0]
-    projected = values.clone()
+    nnz = values.numel()
+    if nnz == 0:
+        return values.clone()
 
-    for i in range(num_rows):
-        mask = (row_indices == i)
-        if mask.sum() == 0:
-            continue
+    # Order by (row asc, value desc) -- a stable sort on rows applied to a
+    # value-descending permutation gives the per-row descending sort.
+    order_v = torch.argsort(values, descending=True)
+    order_r = torch.argsort(row_indices[order_v], stable=True)
+    perm = order_v[order_r]
+    des = values[perm]
+    row_s = row_indices[perm]
 
-        row_vals = values[mask]
+    counts = torch.bincount(row_s, minlength=num_rows)
+    starts = torch.cumsum(counts, 0) - counts
+    pos = torch.arange(nnz, device=device) - starts[row_s]   # 0-based rank in row
+    k = (pos + 1).to(values.dtype)
 
-        # Simplex projection (same algorithm as original FairAdj project())
-        des, sort_idx = torch.sort(row_vals, descending=True)
-        cumsum = torch.cumsum(des, dim=0)
-        k = torch.arange(1, des.shape[0] + 1, device=device).float()
+    # Per-row cumulative sum, via a global cumsum minus each row's base.
+    # Done in float64: a float32 global cumsum reaches ~1e5 at pokec_n scale,
+    # and subtracting to recover row-local sums of ~1 loses ~1e-2 to
+    # cancellation -- far too coarse for a simplex projection.
+    csum_all = torch.cumsum(des.to(torch.float64), 0)
+    csum_ext = torch.cat([csum_all.new_zeros(1), csum_all])
+    cumsum = (csum_all - csum_ext[starts][row_s]).to(values.dtype)
 
-        rho_cond = des + (1.0 / k) * (1.0 - cumsum)
-        rho = (rho_cond > 0).sum()
-        lambda_ = (1.0 / rho.float()) * (1.0 - cumsum[rho - 1])
+    rho_cond = des + (1.0 / k) * (1.0 - cumsum)
+    rho = torch.zeros(num_rows, dtype=torch.long, device=device)
+    rho.scatter_add_(0, row_s, (rho_cond > 0).long())
 
-        result = torch.clamp(row_vals + lambda_, min=0.0)
-        projected[mask] = result
+    # rho >= 1 for any non-empty row (at k=1 the condition is des[0]+1-des[0]=1>0),
+    # so clamp only guards the empty rows, whose lambda is masked out below.
+    gather_idx = (starts + rho - 1).clamp(min=0)
+    lam = (1.0 / rho.clamp(min=1).to(values.dtype)) * (1.0 - cumsum[gather_idx])
+    lam = torch.where(counts > 0, lam, torch.zeros_like(lam))
 
-    return projected
+    # Back in the caller's original ordering.
+    return torch.clamp(values + lam[row_indices], min=0.0)
+
+
+class _SparseValuesMM(torch.autograd.Function):
+    """
+    y = A @ dense, differentiable w.r.t. A's *values* without ever forming a
+    dense N x N tensor.
+
+    torch.sparse.mm's own backward (mm_mat1_sparse_backward in ATen) computes
+    grad_out @ dense.T DENSELY and only afterwards applies sparse_mask, so
+    routing autograd through a sparse_coo_tensor built from a requires_grad
+    values vector still allocates N^2 floats (16.51 GiB at pokec_n's N=66569).
+    d(loss)/d(a_ij) is just <grad_out_i, dense_j>, so we gather the rows/cols we
+    actually need: [nnz, hidden] instead of [N, N].
+    """
+
+    @staticmethod
+    def forward(ctx, values, indices, shape, dense):
+        ctx.save_for_backward(indices, values, dense)
+        ctx.shape = shape
+        adj = torch.sparse_coo_tensor(indices, values, shape)
+        return torch.sparse.mm(adj, dense)
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        indices, values, dense = ctx.saved_tensors
+        grad_out = grad_out.contiguous()
+        row, col = indices[0], indices[1]
+
+        grad_values = grad_dense = None
+        if ctx.needs_input_grad[0]:
+            # <grad_out[row_k], dense[col_k]> for every stored entry k.
+            grad_values = (grad_out[row] * dense[col]).sum(dim=-1)
+        if ctx.needs_input_grad[3]:
+            adj_t = torch.sparse_coo_tensor(
+                torch.stack([col, row]), values, (ctx.shape[1], ctx.shape[0])
+            )
+            grad_dense = torch.sparse.mm(adj_t, grad_out)
+        return grad_values, None, None, grad_dense
+
+
+def sparse_values_mm(values, indices, shape, dense):
+    return _SparseValuesMM.apply(values, indices, shape, dense)
 
 
 class FairAdj(nn.Module):
@@ -2206,7 +2273,6 @@ class FairAdj(nn.Module):
             adj_eye_sp.indices(), norm_val, (self.num_nodes, self.num_nodes)
         ).coalesce()
         
-        adj_norm_v = adj_norm_sp.clone()  # Always sparse!
         pos_edge_index = adj_eye_sp.indices().clone()
         
         # Free intermediates
@@ -2250,19 +2316,37 @@ class FairAdj(nn.Module):
                 optimizer.step()
 
             # ===== Phase T2: Optimize Adj for Fairness =====
-            adj_norm_v = adj_norm_sp.detach().clone().requires_grad_(True)
+            # Differentiate w.r.t. the sparse VALUES, not the sparse tensor, and
+            # do the propagation through sparse_values_mm rather than
+            # torch.sparse.mm. Both are needed: asking autograd for the gradient
+            # of a sparse COO tensor materialises a dense N×N gradient
+            # (66569² × 4B = 16.5 GiB on pokec_n, larger than any GPU here), and
+            # torch.sparse.mm's backward builds that same dense N×N internally
+            # even when the leaf is the [nnz] values vector. The update below
+            # only ever consumed the gradient restricted to adj's sparsity
+            # pattern, which is exactly what d(loss)/d(values) is -- so this is a
+            # memory fix, not an approximation.
+            adj_c = adj_norm_sp.coalesce()
+            adj_indices = adj_c.indices()
+            adj_values = adj_c.values().detach().clone()
 
             for epoch in tqdm(range(self.T2), desc=f"T2 outer={outer+1}"):
+                adj_values_v = adj_values.detach().clone().requires_grad_(True)
+                adj_shape = (self.num_nodes, self.num_nodes)
+
                 # GC1: relu(adj @ (dropout(x) @ w1))
-                hidden1 = F.relu(torch.sparse.mm(adj_norm_v, torch.mm(
-                    F.dropout(features, self.dropout, training=self.model.training),
-                    self.model.gc1.weight)))
+                hidden1 = F.relu(sparse_values_mm(adj_values_v, adj_indices, adj_shape,
+                    torch.mm(
+                        F.dropout(features, self.dropout, training=self.model.training),
+                        self.model.gc1.weight)))
 
                 # GC2 (mu): adj @ (hidden1 @ w2)
-                mu = torch.sparse.mm(adj_norm_v, torch.mm(hidden1, self.model.gc2.weight))
+                mu = sparse_values_mm(adj_values_v, adj_indices, adj_shape,
+                                      torch.mm(hidden1, self.model.gc2.weight))
 
                 # GC3 (logvar): adj @ (hidden1 @ w3)
-                logvar = torch.sparse.mm(adj_norm_v, torch.mm(hidden1, self.model.gc3.weight))
+                logvar = sparse_values_mm(adj_values_v, adj_indices, adj_shape,
+                                          torch.mm(hidden1, self.model.gc3.weight))
 
                 # Reparameterize
                 if self.model.training:
@@ -2284,16 +2368,17 @@ class FairAdj(nn.Module):
                 else:
                     loss = F.mse_loss(intra_scores.mean(), inter_scores.mean())
 
-                # Gradient update on adj_norm_v (sparse-only, no dense N×N)
-                grad = torch.autograd.grad(loss, adj_norm_v)[0]
+                # Gradient update on the values vector (no dense N×N anywhere)
+                grad_values = torch.autograd.grad(loss, adj_values_v)[0]
                 with torch.no_grad():
-                    adj_c = adj_norm_v.coalesce()
-                    grad_c = grad.coalesce()
-                    indices = adj_c.indices()
-                    new_values = adj_c.values() - self.eta * grad_c.values()
-                    new_values = fairadj_project_sparse(indices, new_values, self.num_nodes, self.device)
-                    adj_norm_sp = torch.sparse_coo_tensor(indices, new_values, (self.num_nodes, self.num_nodes)).coalesce()
-                    adj_norm_v = adj_norm_sp.clone().requires_grad_(True)
+                    new_values = adj_values - self.eta * grad_values
+                    adj_values = fairadj_project_sparse(
+                        adj_indices, new_values, self.num_nodes, self.device
+                    )
+
+            adj_norm_sp = torch.sparse_coo_tensor(
+                adj_indices, adj_values, (self.num_nodes, self.num_nodes)
+            ).coalesce()
             
         # Evaluation / Final Embedding
         self.model.eval()

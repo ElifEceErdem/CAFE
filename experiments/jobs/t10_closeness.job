@@ -1,0 +1,35 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=72:00:00
+#SBATCH --array=0-2
+#SBATCH --job-name=t10_close
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t10_closeness_%A_%a.out
+
+# Table 10 -- the mobility-boost closeness probe (Section 7.5).
+# Three networks only: 0=ego-facebook 1=oklahoma 2=unc. Pokec-n and Brightkite
+# were never probed and the paper scopes the claim accordingly.
+#
+# All arms share one trained backbone, so the only difference between +RA and
+# +RA+boost is the multiplier -- that is what licenses attributing the Ego-FB
+# Closeness regression to the boost rather than to fusion.
+# Ego-FB additionally sweeps the dose (panel b).
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/analysis
+
+LAM_GRID=""
+if [ "${DS}" = "ego-facebook" ]; then
+  LAM_GRID="--lam_grid 0.1,0.3,0.5,1.0"
+fi
+
+python -u closeness_mechanism.py ${COMMON} \
+    --runs 10 --K 10 \
+    --beta ${IN_BETA} --lam ${IN_LAM} \
+    --vary_split False ${LAM_GRID} \
+    --save_dir ${REPO}/analysis/plots/closeness_mechanism_paired ${SPLIT}
+
+echo "Done."

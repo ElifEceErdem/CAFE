@@ -1,0 +1,41 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=160:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t07_abl
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t07_ablation_%A_%a.out
+
+# Table 7 -- single-component ablations: CI-In, CI-Pre (coreness penalty
+# alone) and MB-Post (mobility boost alone). The remaining ablation rows come
+# from t04_cafe.job.
+
+source "$(dirname "$0")/_common.sh"
+cd ${REPO}/experiments
+BASE=${REPO}/results_repro/${DS}
+
+run_ci () {  # $1=fairness_method  $2=lambda  $3=outdir
+  mkdir -p ${BASE}/$3
+  echo "=== $1 (lambda=$2) on ${DS} ==="
+  python -u run_coreness_inverse.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+      --fairness_method $1 --lambda_fair "$2" \
+      --use_stratified False --use_pa_aware False --use_ndkl False \
+      --results_file ${BASE}/$3/results_$3_${DS}_${TS}.json ${SPLIT}
+}
+
+mkdir -p ${BASE}/mb_post
+run_ci coreness_inverse_inproc  ${CI_IN}  ci_in
+run_ci coreness_inverse_preproc ${CI_PRE} ci_pre
+
+echo "=== mb_post (lambda=${MB_POST}) on ${DS} ==="
+python -u run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+    --reranking_approach boost --boosting_mode continuous \
+    --lambda_mobility "${MB_POST}" --lambda_bridge 0.0 \
+    --use_stratified False --use_pa_aware False --use_ndkl False \
+    --use_degree_plots False \
+    --results_file ${BASE}/mb_post/results_mb_post_${DS}_${TS}.json ${SPLIT}
+
+echo "Done."

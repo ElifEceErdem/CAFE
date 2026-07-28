@@ -31,6 +31,25 @@ import sys
 from tqdm import tqdm
 
 
+def canon_edges_2col(edges):
+    """
+    Canonicalize an edge tensor/array to [E, 2] (one edge per row).
+
+    split_edge['*']['edge'] is [E, 2] throughout this codebase
+    (backbone/snap_dataset.py), but some tensors circulate as [2, E]
+    (e.g. data.edge_index). Reading rows [0]/[1] of an [E, 2] tensor
+    silently yields the first two EDGES instead of the src/dst columns,
+    which is how the pre-fix versions of compute_baseline_metrics and
+    build_recommendations ended up with a ~4-entry training mask.
+    """
+    e = edges.cpu() if hasattr(edges, 'cpu') else torch.as_tensor(edges)
+    if e.dim() != 2 or (e.size(0) != 2 and e.size(1) != 2):
+        raise ValueError(f"Edge tensor must be [E,2] or [2,E], got {tuple(e.shape)}")
+    if e.size(0) == 2 and e.size(1) != 2:
+        e = e.t()
+    return e
+
+
 def compute_hits_mrr_from_scores(pos_scores, neg_scores):
     """Hits@K and MRR logic from clean script."""
     M = neg_scores.numel() // pos_scores.numel()
@@ -99,8 +118,8 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
         
         # Get degrees - Use raw adjacency sum (vectorized)
         num_nodes = model.num_nodes
-        train_edges_cpu = train_edges.cpu()
-        src, dst = train_edges_cpu[0], train_edges_cpu[1]
+        train_edges_cpu = canon_edges_2col(train_edges)
+        src, dst = train_edges_cpu[:, 0], train_edges_cpu[:, 1]
         # Filter valid edges
         valid = (src >= 0) & (src < num_nodes) & (dst >= 0) & (dst < num_nodes)
         src, dst = src[valid], dst[valid]
@@ -224,8 +243,7 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
         if getattr(args, 'use_equality_gain', False):
             eq_metrics = compute_equality_gain_metrics(
                 recs_baseline, train_edges, pos_test_edge, num_nodes,
-                k_values=[10, 20, 50, 100],
-                fairness_mode=args.fairness_mode
+                k_values=[10, 20, 50, 100]
             )
             results.update(eq_metrics)
 
@@ -245,8 +263,7 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
                 recs_baseline, train_edges, pos_test_edge, deg, num_nodes,
                 k=10,
                 low_percentile=20.0,
-                high_percentile=80.0,
-                fairness_mode=args.fairness_mode
+                high_percentile=80.0
             )
             results.update(strat_metrics)
 
@@ -257,7 +274,6 @@ def compute_baseline_metrics(model, data, split_edge, args, sens_attr=None):
                 recs_baseline, train_edges, pos_test_edge, deg, num_nodes,
                 k=10,
                 num_bins=10,
-                fairness_mode=args.fairness_mode,
                 save_dir=save_dir
             )
             results['_degree_analysis'] = degree_analysis
@@ -405,10 +421,10 @@ def build_recommendations(h_emb, train_edges, eval_users, k, device, score_fn=No
     n = h_emb.size(0)
 
     # Build sparse mask matrix for training edges (CSR for fast row slicing)
-    edges_cpu = train_edges.cpu().numpy()
+    edges_cpu = canon_edges_2col(train_edges).numpy()
     # Symmetric: both directions
-    rows = np.concatenate([edges_cpu[0], edges_cpu[1]])
-    cols = np.concatenate([edges_cpu[1], edges_cpu[0]])
+    rows = np.concatenate([edges_cpu[:, 0], edges_cpu[:, 1]])
+    cols = np.concatenate([edges_cpu[:, 1], edges_cpu[:, 0]])
     valid = (rows < n) & (cols < n)
     rows, cols = rows[valid], cols[valid]
     train_mask_csr = sp.csr_matrix(
@@ -454,6 +470,119 @@ def build_recommendations(h_emb, train_edges, eval_users, k, device, score_fn=No
         del scores  # Free memory
     
     return recs_by_u
+
+def compute_fairness_metrics_with_weak_tie(model, data, split_edge, args, baseline_results):
+    """
+    Evaluate the weak-tie diversification baseline
+    (Sanz-Cruzado & Castells, RecSys 2018) on top of the trained model.
+
+    Post-processing only: re-ranks the baseline candidate pools stored in
+    baseline_results['_recs_baseline'] (top-100 lists ordered by the
+    trained predictor) with the greedy weak-tie re-ranker, then computes
+    the same metric battery as the other methods. The Louvain partition
+    is computed once per run and cached in baseline_results.
+
+    Reads from args: weak_tie_variant ('cegc'|'mc'), weak_tie_lambda,
+    weak_tie_k, community_seed.
+    """
+    from fairness_methods.weak_tie_reranking import (
+        WeakTieReranker, detect_communities,
+        modularity_complement, community_edge_gini_complement,
+        weak_tie_fraction,
+    )
+
+    variant = getattr(args, 'weak_tie_variant', 'cegc')
+    lam = float(getattr(args, 'weak_tie_lambda', 0.5))
+    wt_k = int(getattr(args, 'weak_tie_k', 10))
+
+    print("\n" + "=" * 80)
+    print("COMPUTING WEAK-TIE DIVERSIFICATION METRICS "
+          f"(variant={variant}, lambda={lam}, k={wt_k})")
+    print("=" * 80)
+
+    use_equality_gain = getattr(args, 'use_equality_gain', False)
+    use_centrality_gain = getattr(args, 'use_centrality_gain', False)
+    use_stratified = getattr(args, 'use_stratified', False)
+    centrality_types = baseline_results.get(
+        '_centrality_types',
+        getattr(args, 'centrality_types', ['degree', 'pagerank', 'closeness']))
+
+    train_edges = baseline_results['_train_edges']
+    pos_test_edge = baseline_results['_test_edges']
+    num_nodes = baseline_results['_num_nodes']
+    deg = baseline_results['_deg']
+    recs_baseline = baseline_results['_recs_baseline']
+    h_clean = baseline_results['_h_clean']
+
+    # Louvain communities of the training graph (computed once, cached)
+    membership = baseline_results.get('_wt_membership')
+    if membership is None:
+        membership = detect_communities(
+            train_edges, num_nodes, seed=getattr(args, 'community_seed', 42))
+        baseline_results['_wt_membership'] = membership
+
+    reranker = WeakTieReranker(variant=variant, lam=lam, k=wt_k)
+    recs_postprocessed = reranker.rerank(
+        recs_baseline, train_edges, num_nodes, membership=membership)
+
+    # --- standard battery (mirrors the other post-processing methods) ---
+    results = compute_metrics_from_recs(
+        recs_postprocessed, pos_test_edge, num_nodes, args.fairness_mode)
+
+    with torch.no_grad():
+        mean_h = torch.mean(h_clean, dim=0, keepdim=True)
+        h_with_mean = torch.cat([h_clean, mean_h], dim=0)
+        neg_test_edge = split_edge['test']['edge_neg'].to(model.device)
+        pos_test_pred = model.batch_predict(h_with_mean, pos_test_edge, args.batch_size)
+        neg_test_pred = model.batch_predict(h_with_mean, neg_test_edge.view(-1, 2), args.batch_size)
+    results.update(compute_hits_mrr_from_scores(pos_test_pred, neg_test_pred))
+    results.update(compute_classification_metrics(pos_test_pred, neg_test_pred))
+    results['RawlsBias'] = (0.0, compute_rawlsian_degree_bias(
+        recs_postprocessed, pos_test_edge, deg, num_nodes, k=10))
+
+    if use_equality_gain:
+        results.update(compute_equality_gain_metrics(
+            recs_postprocessed, train_edges, pos_test_edge, num_nodes,
+            k_values=[10, 20, 50, 100]))
+
+    if use_centrality_gain:
+        results.update(compute_all_centrality_equality_gains(
+            recs_postprocessed, train_edges, pos_test_edge, num_nodes,
+            k_values=[10, 20, 50, 100], centrality_types=centrality_types,
+            use_sampling_closeness=getattr(args, 'use_sampling_closeness', True)))
+
+    if use_stratified:
+        results.update(compute_stratified_metrics(
+            recs_postprocessed, train_edges, pos_test_edge, deg, num_nodes,
+            k=10, low_percentile=20.0, high_percentile=80.0,
+            stratification_mode=getattr(args, 'stratification_mode', 'source')))
+
+    sens = getattr(data, 'sens', None)
+    if sens is not None:
+        demo_metrics = compute_demographic_metrics(
+            recs_by_u=recs_postprocessed, train_edges=train_edges,
+            test_edges=pos_test_edge, num_nodes=num_nodes, sens=sens,
+            h_emb=h_clean, features=getattr(data, 'x', None), adj=None, k=10)
+        results.update(demo_metrics)
+        results['Delta_DPR'] = compute_demographic_parity_ratio_change(
+            train_edges, recs_postprocessed, num_nodes, sens, k=10)
+
+    # --- structural-diversity diagnostics (paper Sec. 4 metrics) ---
+    for label, recs in (('base', recs_baseline), ('reranked', recs_postprocessed)):
+        results[f'WT_MC_{label}@{wt_k}'] = (0.0, modularity_complement(
+            train_edges, recs, num_nodes, membership, k=wt_k))
+        results[f'WT_CEGC_{label}@{wt_k}'] = (0.0, community_edge_gini_complement(
+            train_edges, recs, num_nodes, membership, k=wt_k))
+        results[f'WT_WeakFrac_{label}@{wt_k}'] = (0.0, weak_tie_fraction(
+            recs, membership, k=wt_k))
+
+    results['_recs_reranked'] = recs_postprocessed
+    results['_deg'] = deg
+    results['_train_edges'] = train_edges
+    results['_test_edges'] = pos_test_edge
+    results['_num_nodes'] = num_nodes
+    return results
+
 
 def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseline_results):
     """
@@ -540,8 +669,7 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
         if use_equality_gain:
             eq_metrics = compute_equality_gain_metrics(
                 recs_postprocessed, train_edges, pos_test_edge, num_nodes,
-                k_values=[10, 20, 50, 100],
-                fairness_mode=args.fairness_mode
+                k_values=[10, 20, 50, 100]
             )
             results.update(eq_metrics)
         
@@ -562,7 +690,6 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
                 k=10,
                 low_percentile=20.0,
                 high_percentile=80.0,
-                fairness_mode=args.fairness_mode,
                 stratification_mode=args.stratification_mode
             )
             results.update(strat_metrics)
@@ -574,7 +701,6 @@ def compute_fairness_metrics_with_coreness(model, data, split_edge, args, baseli
                 recs_postprocessed, train_edges, pos_test_edge, deg, num_nodes,
                 k=10,
                 num_bins=10,
-                fairness_mode=args.fairness_mode,
                 save_dir=save_dir
             )
             results['_degree_analysis'] = degree_analysis

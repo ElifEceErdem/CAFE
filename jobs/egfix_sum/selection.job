@@ -1,0 +1,218 @@
+#!/bin/bash
+#SBATCH --job-name=egfix_sum_selection
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=120:00:00
+#SBATCH --array=0-34%10
+#SBATCH --output=/tmp/%x_%A_%a.out
+
+# Five datasets x seven lambda_fair values.  Each task trains three paired
+# validation runs and evaluates the complete 6 beta x 5 mobility grid.
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/experiments/run_cafe.py" &&
+              -d "${candidate}/jobs/egfix_sum" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_run_tag() {
+    local value="$1"
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] &&
+        [[ "${value}" != *".."* ]] &&
+        [[ "$(basename -- "${value}")" == "${value}" ]]
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+RUN_TAG="${EGFIX_SUM_RUN_TAG:?EGFIX_SUM_RUN_TAG was not exported}"
+validate_run_tag "${RUN_TAG}" || {
+    echo "ERROR: unsafe EGFIX_SUM_RUN_TAG: ${RUN_TAG}" >&2
+    exit 2
+}
+TASK_ID="${SLURM_ARRAY_TASK_ID:?selection.job must run as an array}"
+if (( TASK_ID < 0 || TASK_ID > 34 )); then
+    echo "ERROR: array index ${TASK_ID} is outside 0..34." >&2
+    exit 2
+fi
+
+CAMPAIGN="${REPO}/results_egfix/${RUN_TAG}"
+SOURCE_MANIFEST="${CAMPAIGN}/source_manifest.json"
+RUNTIME_ENV="${CAMPAIGN}/hl_gnn.conda-explicit.txt"
+RUNTIME_ENV_DIGEST="${CAMPAIGN}/hl_gnn.conda-explicit.sha256"
+[[ -f "${CAMPAIGN}/_CAFE_IN_SUM_PREFLIGHT_COMPLETE" ]] || {
+    echo "ERROR: CAFE-In/sum preflight marker is absent." >&2
+    exit 2
+}
+cd "${REPO}"
+python -u -m jobs.egfix_sum.provenance \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --verify-only
+[[ -s "${RUNTIME_ENV}" && -s "${RUNTIME_ENV_DIGEST}" ]] || {
+    echo "ERROR: runtime-environment attestation is absent." >&2
+    exit 2
+}
+RECORDED_ENV_SHA="$(awk 'NR == 1 {print $1}' "${RUNTIME_ENV_DIGEST}")"
+[[ "$(sha256sum "${RUNTIME_ENV}" | awk '{print $1}')" == "${RECORDED_ENV_SHA}" ]] || {
+    echo "ERROR: runtime-environment snapshot digest is invalid." >&2
+    exit 2
+}
+CURRENT_ENV_SHA="$(conda list --explicit | sha256sum | awk '{print $1}')"
+[[ "${CURRENT_ENV_SHA}" == "${RECORDED_ENV_SHA}" ]] || {
+    echo "ERROR: active hl_gnn environment differs from campaign snapshot." >&2
+    exit 2
+}
+
+IFS=$'\t' read -r DATASET METHOD MODE PENALTY_NAME PENALTY < <(
+    python -u -m jobs.egfix_sum.protocol \
+        --task-index "${TASK_ID}" \
+        --format tsv
+)
+[[ "${METHOD}" == "cafe_in" &&
+   "${MODE}" == "inproc" &&
+   "${PENALTY_NAME}" == "lambda_fair" ]] || {
+    echo "ERROR: protocol returned a non-CAFE-In task." >&2
+    exit 2
+}
+
+TASK_DIR="${CAMPAIGN}/selection/${DATASET}/${METHOD}/task_${TASK_ID}"
+if [[ -e "${TASK_DIR}/results.json" ||
+      -e "${TASK_DIR}/_SUCCESS" ]]; then
+    echo "ERROR: refusing to overwrite completed task: ${TASK_DIR}" >&2
+    exit 2
+fi
+mkdir -p "${TASK_DIR}"
+
+export LD_LIBRARY_PATH="/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}"
+export MPLCONFIGDIR="/tmp/cafe-egfix-sum-mpl-${SLURM_JOB_ID}-${TASK_ID}"
+export XDG_CACHE_HOME="/tmp/cafe-egfix-sum-cache-${SLURM_JOB_ID}-${TASK_ID}"
+export PYTHONHASHSEED=42
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+EVAL_STEPS=10
+PATIENCE=50
+if [[ "${DATASET}" == "pokec_n" || "${DATASET}" == "brightkite" ]]; then
+    EVAL_STEPS=25
+    PATIENCE=6
+fi
+
+COMMON_ARGS=(
+    --data_name "${DATASET}"
+    --data_path "${REPO}/data/SNAP"
+    --encoder HLGNN
+    --predictor MLP
+    --epochs 500
+    --eval_steps "${EVAL_STEPS}"
+    --patience "${PATIENCE}"
+    --batch_size 16384
+    --lr 0.001
+    --loss_func AUC
+    --num_neg 1
+    --runs 3
+    --seed 42
+    --penalization_mode inproc
+    --use_mobility_boost True
+    --lambda_fair "${PENALTY}"
+    --beta_ra "0.0,0.1,0.5,1.0,2.0,5.0"
+    --lambda_mobility "0.0,0.1,0.3,0.5,1.0"
+    --coreness_alpha 1.0
+    --penalty_reduction sum
+    --reset_seed_per_model True
+    --evaluation_split valid
+    --selection_mode True
+    --skip_final_comprehensive_eval True
+    --k_values 10
+    --use_demographics False
+    --use_equality_gain True
+    --use_centrality_gain True
+    --centrality_types pagerank,closeness
+    --closeness_seed 42
+    --closeness_sample_size 0
+    --closeness_epsilon 0.1
+    --source_manifest "${SOURCE_MANIFEST}"
+    --results_file "${TASK_DIR}/results.json"
+)
+
+if [[ "${DATASET}" == "pokec_n" || "${DATASET}" == "brightkite" ]]; then
+    COMMON_ARGS+=(
+        --eval_skip_test True
+        --eval_max_nodes 5000
+    )
+fi
+if [[ "${DATASET}" == "brightkite" ]]; then
+    COMMON_ARGS+=(
+        --split_file "${REPO}/data/SNAP/brightkite/temporal_split.pt"
+    )
+fi
+
+SOURCE_MANIFEST_SHA256="$(sha256sum "${SOURCE_MANIFEST}" | awk '{print $1}')"
+{
+    printf 'run_tag=%s\n' "${RUN_TAG}"
+    printf 'slurm_job_id=%s\n' "${SLURM_JOB_ID:-manual}"
+    printf 'array_task_id=%s\n' "${TASK_ID}"
+    printf 'dataset=%s\n' "${DATASET}"
+    printf 'method=%s\n' "${METHOD}"
+    printf 'penalization_mode=%s\n' "${MODE}"
+    printf 'penalty_name=%s\n' "${PENALTY_NAME}"
+    printf 'penalty_value=%s\n' "${PENALTY}"
+    printf 'evaluation_split=valid\n'
+    printf 'penalty_reduction=sum\n'
+    printf 'loss_func=AUC\n'
+    printf 'num_neg=1\n'
+    printf 'batch_size=16384\n'
+    printf 'source_manifest_sha256=%s\n' "${SOURCE_MANIFEST_SHA256}"
+    printf 'runtime_environment_sha256=%s\n' "${RECORDED_ENV_SHA}"
+    printf 'closeness_seed=42\n'
+} > "${TASK_DIR}/task.env"
+
+printf '%q ' python -u experiments/run_cafe.py "${COMMON_ARGS[@]}" \
+    > "${TASK_DIR}/command.sh"
+printf '\n' >> "${TASK_DIR}/command.sh"
+
+python -u experiments/run_cafe.py "${COMMON_ARGS[@]}"
+[[ -s "${TASK_DIR}/results.json" ]] || {
+    echo "ERROR: runner returned without a non-empty results.json." >&2
+    exit 1
+}
+(
+    cd "${TASK_DIR}"
+    sha256sum results.json > results.sha256
+)
+
+python -u -m jobs.egfix_sum.provenance \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --verify-only
+CURRENT_ENV_SHA="$(conda list --explicit | sha256sum | awk '{print $1}')"
+[[ "${CURRENT_ENV_SHA}" == "${RECORDED_ENV_SHA}" ]] || {
+    echo "ERROR: hl_gnn environment changed while the task was running." >&2
+    exit 2
+}
+
+touch "${TASK_DIR}/_SUCCESS"
+echo "CAFE-In/sum selection complete: ${DATASET} lambda_fair=${PENALTY}"

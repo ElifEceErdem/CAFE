@@ -31,8 +31,10 @@ def train_model(model, data, split_edge, args, patience=50):
         # Always run validation on the last epoch or evaluation steps
         if (epoch % args.eval_steps == 0) or (epoch == args.epochs):
             results = model.test(data, split_edge, batch_size=args.batch_size,
-                               evaluator=evaluator, eval_metric='precision10', 
-                               fairness_mode=args.fairness_mode)
+                               evaluator=evaluator, eval_metric='precision10',
+                               fairness_mode=args.fairness_mode,
+                               skip_test_eval=getattr(args, 'eval_skip_test', False),
+                               max_eval_nodes=getattr(args, 'eval_max_nodes', 0))
             
             # Metric Selection for validation
             metric_map = {

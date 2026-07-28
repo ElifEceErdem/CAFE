@@ -1,0 +1,85 @@
+#!/bin/bash
+#SBATCH --job-name=egfix_preflight
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16GB
+#SBATCH --time=02:00:00
+#SBATCH --output=/tmp/%x_%j.out
+
+# CPU-only integration gate for the corrected-EG campaign.  Submit through
+# submit_selection.sh so CAFE_REPO and EGFIX_RUN_TAG are fixed for the job.
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/analysis/egfix_preflight.py" &&
+              -f "${candidate}/experiments/run_cafe.py" &&
+              -d "${candidate}/jobs/egfix" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_run_tag() {
+    local value="$1"
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] &&
+        [[ "${value}" != *".."* ]] &&
+        [[ "$(basename -- "${value}")" == "${value}" ]]
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+RUN_TAG="${EGFIX_RUN_TAG:?EGFIX_RUN_TAG was not exported by submit_selection.sh}"
+validate_run_tag "${RUN_TAG}" || {
+    echo "ERROR: unsafe EGFIX_RUN_TAG: ${RUN_TAG}" >&2
+    exit 2
+}
+
+CAMPAIGN="${REPO}/results_egfix/${RUN_TAG}"
+SOURCE_MANIFEST="${CAMPAIGN}/source_manifest.json"
+[[ -d "${CAMPAIGN}" && -s "${SOURCE_MANIFEST}" ]] || {
+    echo "ERROR: campaign or source manifest is missing: ${CAMPAIGN}" >&2
+    exit 2
+}
+
+cd "${REPO}"
+
+export LD_LIBRARY_PATH="/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}"
+export MPLCONFIGDIR="/tmp/cafe-egfix-mpl-${SLURM_JOB_ID:-manual}"
+export XDG_CACHE_HOME="/tmp/cafe-egfix-cache-${SLURM_JOB_ID:-manual}"
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+python -u analysis/egfix_preflight.py \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --verify-only
+
+python -m unittest discover -s tests -p 'test_*.py' -v
+
+# The tests must not have altered any frozen campaign source.
+python -u analysis/egfix_preflight.py \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --verify-only
+
+touch "${CAMPAIGN}/_PREFLIGHT_COMPLETE"
+echo "Preflight passed: ${CAMPAIGN}"

@@ -27,12 +27,41 @@ def load_dataset(args):
     Returns: dataset, split_edge, data, degrees
     """
     dataset = SNAPDataset(root=args.data_path, name=args.data_name)
-    
+
+    split_file = getattr(args, 'split_file', None)
+    # Escape hatch: split_file='random' forces the on-the-fly random split
+    # even for Brightkite (protocol deviation — see below).
+    force_random = isinstance(split_file, str) and split_file.strip().lower() == 'random'
+
     # Check if a specific split file is provided
-    if hasattr(args, 'split_file') and args.split_file and os.path.exists(args.split_file):
-        print(f"Loading split from file: {args.split_file}")
-        split_edge = torch.load(args.split_file)
+    if not force_random and split_file and os.path.exists(split_file):
+        print(f"Loading split from file: {split_file}")
+        split_edge = torch.load(split_file)
+    elif not force_random and str(args.data_name).lower() == 'brightkite':
+        # Brightkite is evaluated under a TEMPORAL split (paper §6.3). The
+        # split is never drawn on the fly: we load the canonical artifact
+        # produced by data/SNAP/brightkite/create_temporal_split_brightkite.py
+        # (proxy timestamps = max of the endpoints' first check-ins; fixed
+        # split, eval negatives sampled once at seed 42). data_split_seed is
+        # deliberately ignored here — under a temporal regime there is no
+        # split variance to sample, so paired runs vary training seeds only.
+        temporal_path = os.path.join(args.data_path, 'brightkite', 'temporal_split.pt')
+        if not os.path.exists(temporal_path):
+            raise FileNotFoundError(
+                f"Brightkite temporal split not found at {temporal_path}. "
+                "Generate it with data/SNAP/brightkite/"
+                "create_temporal_split_brightkite.py, or pass "
+                "split_file='random' to explicitly run a random split "
+                "(deviates from the paper's protocol)."
+            )
+        print(f"Brightkite: loading TEMPORAL split from {temporal_path} "
+              f"(fixed split; data_split_seed is ignored)")
+        split_edge = torch.load(temporal_path)
     else:
+        if force_random and str(args.data_name).lower() == 'brightkite':
+            print("Brightkite: split_file='random' given — using an ON-THE-FLY "
+                  "RANDOM split (protocol deviation; the paper uses the "
+                  "temporal split)")
         # Default behavior: Use seed 42 (unless data_split_seed is added later)
         # We can also support args.data_split_seed if needed, but file-based is priority now
         seed = getattr(args, 'data_split_seed', 42)

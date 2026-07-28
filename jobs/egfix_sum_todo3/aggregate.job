@@ -1,0 +1,206 @@
+#!/bin/bash
+#SBATCH --job-name=egfix_todo3_aggregate
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=72:00:00
+#SBATCH --array=0-49%10
+#SBATCH --output=/tmp/%x_%A_%a.out
+
+# Five fixed-split datasets x training seeds 42..51.
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/experiments/run_significance.py" &&
+              -d "${candidate}/jobs/egfix_sum_todo3" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_run_tag() {
+    local value="$1"
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] &&
+        [[ "${value}" != *".."* ]] &&
+        [[ "$(basename -- "${value}")" == "${value}" ]]
+}
+
+verify_runtime_environment() {
+    local frozen="$1" current expected
+    current="$(mktemp)"
+    expected="$(mktemp)"
+    conda list --explicit | sed '/^[[:space:]]*$/d' > "${current}"
+    sed '/^[[:space:]]*$/d' "${frozen}" > "${expected}"
+    cmp -s "${current}" "${expected}" || {
+        echo "ERROR: active hl_gnn environment differs from frozen runtime." >&2
+        rm -f "${current}" "${expected}"
+        return 1
+    }
+    rm -f "${current}" "${expected}"
+}
+
+verify_phase_state() {
+    python -u -m jobs.egfix_sum_todo3.provenance \
+        --source-manifest "${SOURCE_MANIFEST}" \
+        --sum-campaign "${SUM_CAMPAIGN}" \
+        --pre-campaign "${PRE_CAMPAIGN}" \
+        --repo-root "${REPO}" \
+        --verify-only
+    python -u -m jobs.egfix_sum_todo3.compose_selected_configs \
+        --output-dir "${CAMPAIGN}" \
+        --source-manifest "${SOURCE_MANIFEST}" \
+        --sum-campaign "${SUM_CAMPAIGN}" \
+        --pre-campaign "${PRE_CAMPAIGN}" \
+        --repo-root "${REPO}" \
+        --verify-only
+    verify_runtime_environment "${RUNTIME}"
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+SUM_RUN_TAG="${EGFIX_SUM_RUN_TAG:?missing EGFIX_SUM_RUN_TAG}"
+PRE_RUN_TAG="${EGFIX_PRE_RUN_TAG:?missing EGFIX_PRE_RUN_TAG}"
+validate_run_tag "${SUM_RUN_TAG}" && validate_run_tag "${PRE_RUN_TAG}" || {
+    echo "ERROR: unsafe upstream run tag." >&2
+    exit 2
+}
+TASK_ID="${SLURM_ARRAY_TASK_ID:?aggregate.job requires a Slurm array}"
+if (( TASK_ID < 0 || TASK_ID > 49 )); then
+    echo "ERROR: aggregate array index must be in 0..49." >&2
+    exit 2
+fi
+
+SUM_CAMPAIGN="${REPO}/results_egfix/${SUM_RUN_TAG}"
+PRE_CAMPAIGN="${REPO}/results_egfix/${PRE_RUN_TAG}"
+CAMPAIGN="${SUM_CAMPAIGN}/todo3"
+SOURCE_MANIFEST="${CAMPAIGN}/source_manifest.json"
+SELECTED_CONFIGS="${CAMPAIGN}/selected_configs.csv"
+RUNTIME="${SUM_CAMPAIGN}/hl_gnn.conda-explicit.txt"
+[[ -f "${CAMPAIGN}/_PREFLIGHT_COMPLETE" ]] || {
+    echo "ERROR: TODO3 preflight has not completed." >&2
+    exit 2
+}
+cd "${REPO}"
+verify_phase_state
+
+DATASETS=(ego-facebook oklahoma unc pokec_n brightkite)
+DATASET_INDEX=$((TASK_ID / 10))
+SEED_OFFSET=$((TASK_ID % 10))
+DATASET="${DATASETS[DATASET_INDEX]}"
+TRAINING_SEED=$((42 + SEED_OFFSET))
+TASK_DIR="${CAMPAIGN}/aggregate/${DATASET}/seed_${TRAINING_SEED}"
+if [[ -e "${TASK_DIR}/_SUCCESS" ]]; then
+    echo "ERROR: refusing to overwrite completed task ${TASK_DIR}." >&2
+    exit 2
+fi
+mkdir -p "${TASK_DIR}"
+
+export LD_LIBRARY_PATH="/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}"
+export MPLCONFIGDIR="/tmp/cafe-egfix-todo3-mpl-${SLURM_JOB_ID}-${TASK_ID}"
+export XDG_CACHE_HOME="/tmp/cafe-egfix-todo3-cache-${SLURM_JOB_ID}-${TASK_ID}"
+export PYTHONHASHSEED="${TRAINING_SEED}"
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+COMMON_ARGS=(
+    --data_name "${DATASET}"
+    --data_path "${REPO}/data/SNAP"
+    --encoder HLGNN
+    --predictor MLP
+    --epochs 500
+    --batch_size 16384
+    --lr 0.001
+    --loss_func AUC
+    --num_neg 1
+    --seed_start "${TRAINING_SEED}"
+    --num_seeds 1
+    --vary_split False
+    --protocol headline
+    --selected_configs "${SELECTED_CONFIGS}"
+    --penalty_reduction sum
+    --skip_final_comprehensive_eval True
+    --eval_skip_test True
+    --k_values 10
+    --centrality_types pagerank,closeness
+    --closeness_seed 42
+    --closeness_sample_size 0
+    --closeness_epsilon 0.1
+    --use_demographics False
+    --source_manifest "${SOURCE_MANIFEST}"
+    --out_csv "${TASK_DIR}/per_seed_metrics.csv"
+)
+if [[ "${DATASET}" == "pokec_n" || "${DATASET}" == "brightkite" ]]; then
+    COMMON_ARGS+=(--eval_max_nodes 5000 --eval_steps 25 --patience 6)
+else
+    COMMON_ARGS+=(--eval_steps 10 --patience 50)
+fi
+if [[ "${DATASET}" == "brightkite" ]]; then
+    COMMON_ARGS+=(--split_file "${REPO}/data/SNAP/brightkite/temporal_split.pt")
+fi
+
+SELECTED_SHA="$(sha256sum "${SELECTED_CONFIGS}" | awk '{print $1}')"
+SOURCE_SHA="$(sha256sum "${SOURCE_MANIFEST}" | awk '{print $1}')"
+RUNTIME_SHA="$(sha256sum "${RUNTIME}" | awk '{print $1}')"
+{
+    printf 'stage=aggregate\n'
+    printf 'sum_run_tag=%s\n' "${SUM_RUN_TAG}"
+    printf 'pre_run_tag=%s\n' "${PRE_RUN_TAG}"
+    printf 'array_task_id=%s\n' "${TASK_ID}"
+    printf 'dataset=%s\n' "${DATASET}"
+    printf 'training_seed=%s\n' "${TRAINING_SEED}"
+    printf 'split_seed=42\n'
+    printf 'evaluation_split=test\n'
+    printf 'penalty_reduction=sum\n'
+    printf 'loss_func=AUC\n'
+    printf 'num_neg=1\n'
+    printf 'batch_size=16384\n'
+    printf 'eval_skip_test=True\n'
+    printf 'selected_configs_sha256=%s\n' "${SELECTED_SHA}"
+    printf 'source_manifest_sha256=%s\n' "${SOURCE_SHA}"
+    printf 'runtime_environment_sha256=%s\n' "${RUNTIME_SHA}"
+} > "${TASK_DIR}/task.env"
+printf '%q ' python -u experiments/run_significance.py "${COMMON_ARGS[@]}" \
+    > "${TASK_DIR}/command.sh"
+printf '\n' >> "${TASK_DIR}/command.sh"
+
+python -u experiments/run_significance.py "${COMMON_ARGS[@]}"
+[[ -s "${TASK_DIR}/per_seed_metrics.csv" &&
+   -s "${TASK_DIR}/per_seed_metrics.csv.complete.json" ]] || {
+    echo "ERROR: aggregate runner did not produce both required outputs." >&2
+    exit 1
+}
+verify_phase_state
+(
+    cd "${TASK_DIR}"
+    sha256sum \
+        task.env \
+        command.sh \
+        per_seed_metrics.csv \
+        per_seed_metrics.csv.complete.json \
+        > task_artifacts.sha256
+    sha256sum --check --quiet task_artifacts.sha256
+)
+touch "${TASK_DIR}/_SUCCESS"
+echo "TODO3 aggregate complete: ${DATASET}, seed ${TRAINING_SEED}"

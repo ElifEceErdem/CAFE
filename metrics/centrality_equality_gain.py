@@ -16,10 +16,43 @@ import torch
 import numpy as np
 import math
 import networkx as nx
-from typing import Dict, List, Tuple
+from typing import Dict, Hashable, List, Optional, Tuple
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import eigs
 import networkit as nk
+
+from metrics.graph_utils import (
+    build_control_edge_set,
+    build_predicted_edge_set,
+    canonicalize_undirected_edges,
+    degree_from_undirected_edges,
+    degree_from_simple_undirected_edges,
+    edge_tensor_2col,
+    novel_edges_against_simple_undirected_base,
+    recommendations_to_edges,
+)
+
+
+_EG_CENTRALITY_TYPES = {
+    'degree',
+    'katz',
+    'pagerank',
+    'eigenvector',
+    'closeness',
+    'harmonic',
+}
+
+
+def _validate_eg_centrality_type(centrality_type: str) -> None:
+    """Reject directed degree modes at the undirected structural-EG boundary."""
+    if centrality_type not in _EG_CENTRALITY_TYPES:
+        if centrality_type in {'indegree', 'outdegree', 'total'}:
+            raise ValueError(
+                f"{centrality_type!r} is a directed degree mode and is not "
+                "valid for Equality Gain on a simple undirected graph. Use "
+                "'degree'; use the exposure metrics for directed counts."
+            )
+        raise ValueError(f"Unknown centrality type: {centrality_type}")
 
 
 def compute_gini_coefficient(values: torch.Tensor) -> float:
@@ -65,7 +98,11 @@ def edges_to_adjacency_matrix(edges: torch.Tensor, num_nodes: int, directed: boo
     Returns:
         scipy.sparse.csr_matrix
     """
-    edges_np = edges.cpu().numpy()
+    if directed:
+        edge_tensor = edge_tensor_2col(edges)
+    else:
+        edge_tensor = canonicalize_undirected_edges(edges, num_nodes)
+    edges_np = edge_tensor.numpy()
     
     # Create COO format data
     row = edges_np[:, 0]
@@ -80,15 +117,32 @@ def edges_to_adjacency_matrix(edges: torch.Tensor, num_nodes: int, directed: boo
     
     # Create sparse matrix
     adj = csr_matrix((data, (row, col)), shape=(num_nodes, num_nodes))
+    if not directed:
+        # Defense in depth: centrality on the paper's simple graph must never
+        # interpret duplicate rows as edge weights.
+        adj.data = np.ones_like(adj.data)
     
     return adj
 
 
-def compute_degree_centrality(edges: torch.Tensor, num_nodes: int, mode: str = 'total') -> torch.Tensor:
+def compute_degree_centrality(
+    edges: torch.Tensor,
+    num_nodes: int,
+    mode: str = 'undirected',
+) -> torch.Tensor:
     """
     Compute degree centrality (vectorized).
+
+    ``undirected``/``degree`` canonicalizes a simple graph. The directed
+    ``indegree``, ``outdegree``, and ``total`` modes operate on the supplied
+    orientation and remain available to non-EG diagnostics.
     """
-    edges_cpu = edges.cpu()
+    if mode in ['degree', 'undirected']:
+        return degree_from_undirected_edges(edges, num_nodes)
+    if mode not in ['indegree', 'outdegree', 'total']:
+        raise ValueError(f"Unknown degree mode: {mode}")
+
+    edges_cpu = edge_tensor_2col(edges)
     degrees = torch.zeros(num_nodes, dtype=torch.float32)
 
     if mode in ['indegree', 'total']:
@@ -279,15 +333,7 @@ def _build_networkit_graph(edges: torch.Tensor, num_nodes: int):
     Build a NetworKit graph from a PyTorch edge tensor (vectorized).
     """
 
-    edges_np = edges.cpu().numpy()
-    # Filter valid edges
-    mask = (edges_np[:, 0] < num_nodes) & (edges_np[:, 1] < num_nodes)
-    edges_np = edges_np[mask]
-    # Deduplicate: canonical form (min, max) then unique
-    src = np.minimum(edges_np[:, 0], edges_np[:, 1])
-    dst = np.maximum(edges_np[:, 0], edges_np[:, 1])
-    canonical = np.stack([src, dst], axis=1)
-    unique_edges = np.unique(canonical, axis=0)
+    unique_edges = canonicalize_undirected_edges(edges, num_nodes).numpy()
 
     G = nk.Graph(num_nodes, weighted=False, directed=False)
     for i in range(len(unique_edges)):
@@ -296,9 +342,10 @@ def _build_networkit_graph(edges: torch.Tensor, num_nodes: int):
 
 
 def compute_closeness_centrality(edges: torch.Tensor, num_nodes: int,
-                                 use_sampling: bool = True, 
+                                 use_sampling: bool = True,
                                  sample_size: int = None,
-                                 epsilon: float = 0.1) -> torch.Tensor:
+                                 epsilon: float = 0.1,
+                                 random_seed: int = 42) -> torch.Tensor:
     """
     Compute closeness centrality using NetworKit.
     
@@ -312,13 +359,15 @@ def compute_closeness_centrality(edges: torch.Tensor, num_nodes: int,
         use_sampling: Whether to use sampling for large graphs
         sample_size: Override sample size (if None, uses EW formula)
         epsilon: Error bound for EW formula (default: 0.1)
+        random_seed: NetworKit RNG seed used by approximate closeness
     
     Returns:
         closeness: Closeness centrality scores [num_nodes]
     """
     try:
-        return _compute_closeness_networkit(edges, num_nodes, use_sampling, 
-                                            sample_size, epsilon)
+        return _compute_closeness_networkit(
+            edges, num_nodes, use_sampling, sample_size, epsilon, random_seed
+        )
     except ImportError:
         print("  [Closeness] NetworKit not available, falling back to NetworkX")
         return _compute_closeness_networkx(edges, num_nodes)
@@ -327,7 +376,8 @@ def compute_closeness_centrality(edges: torch.Tensor, num_nodes: int,
 def _compute_closeness_networkit(edges: torch.Tensor, num_nodes: int,
                                   use_sampling: bool = True,
                                   sample_size: int = None,
-                                  epsilon: float = 0.1) -> torch.Tensor:
+                                  epsilon: float = 0.1,
+                                  random_seed: int = 42) -> torch.Tensor:
     """
     Compute closeness centrality using NetworKit (C++ backend).
     
@@ -348,7 +398,12 @@ def _compute_closeness_networkit(edges: torch.Tensor, num_nodes: int,
             sample_size = _eppstein_wang_sample_size(num_nodes, epsilon)
         
         print(f"  [Closeness] Approximating closeness for {num_nodes} nodes "
-              f"(k={sample_size} samples, ε={epsilon}, EW formula)")
+              f"(k={sample_size} samples, ε={epsilon}, seed={random_seed}, "
+              f"EW formula)")
+        # ApproxCloseness samples pivots internally.  Reset NetworKit's RNG
+        # immediately before every invocation so the observed/control and
+        # recommendation graphs use common, reproducible random pivots.
+        nk.setSeed(int(random_seed), False)
         cc = nk.centrality.ApproxCloseness(G, nSamples=sample_size, 
                                             normalized=True, 
                                             type=nk.centrality.ClosenessType.OUTBOUND)
@@ -438,7 +493,7 @@ def build_centrality_distribution(
         centrality: Centrality scores [num_nodes]
     """
     if centrality_type in ['degree', 'indegree', 'outdegree', 'total']:
-        mode = centrality_type if centrality_type != 'degree' else 'total'
+        mode = 'undirected' if centrality_type == 'degree' else centrality_type
         return compute_degree_centrality(edges, num_nodes, mode)
     
     elif centrality_type == 'katz':
@@ -471,26 +526,15 @@ def build_predicted_centrality(
     """
     Build centrality distribution for predicted graph (train + recommendations).
     """
-    # Convert recommendations to edge list
-    rec_edges = []
-    for u, vs in recs_by_u.items():
-        for v in vs[:k]:
-            if 0 <= u < num_nodes and 0 <= v < num_nodes:
-                rec_edges.append([u, v])
-    
-    if not rec_edges:
-        # No recommendations, use only training edges
-        all_edges = train_edges
-    else:
-        # FIX: Create tensor on same device as train_edges
-        rec_edges_tensor = torch.tensor(
-            rec_edges, 
-            dtype=torch.long, 
-            device=train_edges.device  # <- ADD THIS
-        )
-        all_edges = torch.cat([train_edges, rec_edges_tensor], dim=0)
-    
-    return build_centrality_distribution(all_edges, num_nodes, centrality_type, **kwargs)
+    _validate_eg_centrality_type(centrality_type)
+    predicted_edges = build_predicted_edge_set(
+        train_edges, recs_by_u, num_nodes, k
+    )
+    if centrality_type == 'degree':
+        return degree_from_simple_undirected_edges(predicted_edges, num_nodes)
+    return build_centrality_distribution(
+        predicted_edges, num_nodes, centrality_type, **kwargs
+    )
 
 
 def build_control_centrality(
@@ -503,8 +547,13 @@ def build_control_centrality(
     """
     Build centrality distribution for control graph (train + test).
     """
-    all_edges = torch.cat([train_edges, test_edges], dim=0)
-    return build_centrality_distribution(all_edges, num_nodes, centrality_type, **kwargs)
+    _validate_eg_centrality_type(centrality_type)
+    control_edges = build_control_edge_set(train_edges, test_edges, num_nodes)
+    if centrality_type == 'degree':
+        return degree_from_simple_undirected_edges(control_edges, num_nodes)
+    return build_centrality_distribution(
+        control_edges, num_nodes, centrality_type, **kwargs
+    )
 
 
 def compute_centrality_equality_gain(
@@ -543,6 +592,122 @@ def compute_centrality_equality_gain(
     return equality_gain, gini_control, gini_pred
 
 
+def compute_centrality_equality_gain_by_source_bins(
+    recs_by_u: Dict[int, List[int]],
+    source_bins: Dict[int, Hashable],
+    train_edges: torch.Tensor,
+    test_edges: torch.Tensor,
+    num_nodes: int,
+    k: int,
+    centrality_type: str,
+    bin_ids: Optional[List[Hashable]] = None,
+    **kwargs,
+) -> Dict[Hashable, Tuple[float, float, float]]:
+    """Compute EG counterfactuals for source-defined recommendation bins.
+
+    Each bin uses the full observed control graph and a predicted graph in
+    which only recommendations issued by sources assigned to that bin
+    materialize.  The bin values are counterfactuals and are not additive.
+    """
+    if bin_ids is None:
+        bin_ids = sorted(set(source_bins.values()))
+
+    control = build_control_centrality(
+        train_edges, test_edges, num_nodes, centrality_type, **kwargs
+    )
+    gini_control = compute_gini_coefficient(control)
+    results = {}
+
+    for bin_id in bin_ids:
+        filtered_recs = {
+            u: values
+            for u, values in recs_by_u.items()
+            if source_bins.get(int(u)) == bin_id
+        }
+        predicted = build_predicted_centrality(
+            train_edges, filtered_recs, num_nodes, k, centrality_type, **kwargs
+        )
+        gini_pred = compute_gini_coefficient(predicted)
+        equality_gain = (
+            0.0
+            if gini_control == 0
+            else ((gini_control - gini_pred) / gini_control) * 100.0
+        )
+        results[bin_id] = (equality_gain, gini_control, gini_pred)
+
+    return results
+
+
+def compute_degree_equality_gain_by_source_bins_for_models(
+    recs_by_model: Dict[str, Dict[int, List[int]]],
+    source_bins: Dict[int, Hashable],
+    train_edges: torch.Tensor,
+    test_edges: torch.Tensor,
+    num_nodes: int,
+    k: int,
+    bin_ids: Optional[List[Hashable]] = None,
+) -> Dict[str, Dict[Hashable, Tuple[float, float, float]]]:
+    """Compute source-bin Degree EG for multiple models with shared caches.
+
+    The observed control, canonical training graph, and training degrees are
+    model-independent and are built once. Per bin, only the recommendation
+    events are canonicalized; train overlaps are removed by searching the
+    cached sorted training-edge keys. This is numerically equivalent to
+    :func:`compute_centrality_equality_gain_by_source_bins` with
+    ``centrality_type="degree"``.
+    """
+    if bin_ids is None:
+        bin_ids = sorted(set(source_bins.values()))
+
+    train_simple = canonicalize_undirected_edges(train_edges, num_nodes)
+    train_degree = degree_from_simple_undirected_edges(
+        train_simple, num_nodes
+    )
+    control_simple = build_control_edge_set(
+        train_simple, test_edges, num_nodes
+    )
+    control_degree = degree_from_simple_undirected_edges(
+        control_simple, num_nodes
+    )
+    gini_control = compute_gini_coefficient(control_degree)
+
+    all_results = {}
+    for model_name, recs_by_u in recs_by_model.items():
+        grouped_recs = {bin_id: {} for bin_id in bin_ids}
+        for raw_u, values in recs_by_u.items():
+            bin_id = source_bins.get(int(raw_u))
+            if bin_id in grouped_recs:
+                grouped_recs[bin_id][raw_u] = values
+
+        model_results = {}
+        for bin_id in bin_ids:
+            rec_edges = recommendations_to_edges(
+                grouped_recs[bin_id], num_nodes, k
+            )
+            novel_edges = novel_edges_against_simple_undirected_base(
+                train_simple, rec_edges, num_nodes
+            )
+            predicted_degree = train_degree.clone()
+            if novel_edges.numel() > 0:
+                predicted_degree += torch.bincount(
+                    novel_edges.reshape(-1), minlength=num_nodes
+                ).to(dtype=torch.float32)
+            gini_pred = compute_gini_coefficient(predicted_degree)
+            equality_gain = (
+                0.0
+                if gini_control == 0
+                else ((gini_control - gini_pred) / gini_control) * 100.0
+            )
+            model_results[bin_id] = (
+                equality_gain,
+                gini_control,
+                gini_pred,
+            )
+        all_results[model_name] = model_results
+
+    return all_results
+
+
 def compute_all_centrality_equality_gains(
     recs_by_u: Dict[int, List[int]],
     train_edges: torch.Tensor,
@@ -550,7 +715,11 @@ def compute_all_centrality_equality_gains(
     num_nodes: int,
     k_values: List[int] = None,
     centrality_types: List[str] = None,
-    use_sampling_closeness: bool = True
+    use_sampling_closeness: bool = True,
+    closeness_random_seed: int = 42,
+    closeness_sample_size: int = None,
+    closeness_epsilon: float = 0.1,
+    control_cache: Optional[Dict[Tuple[object, ...], Tuple[torch.Tensor, float]]] = None,
 ) -> Dict[str, Tuple[float, float]]:
     """
     Compute Equality Gain for multiple centrality measures and K values.
@@ -563,6 +732,13 @@ def compute_all_centrality_equality_gains(
         k_values: List of K values
         centrality_types: List of centrality types to compute
         use_sampling_closeness: Use sampling for closeness (large graphs)
+        closeness_random_seed: NetworKit seed for approximate closeness
+        closeness_sample_size: Optional fixed number of approximation pivots
+        closeness_epsilon: Eppstein--Wang error parameter when sample size is
+            selected adaptively
+        control_cache: Optional caller-owned cache for control centralities.
+            Reusing it is exact when train/test edges and centrality options
+            are unchanged.
     
     Returns:
         dict: {f'{centrality}_EG@{k}': (0.0, value)}
@@ -572,6 +748,8 @@ def compute_all_centrality_equality_gains(
     
     if centrality_types is None:
         centrality_types = ['degree', 'katz', 'pagerank', 'eigenvector', 'closeness']
+    for centrality_type in centrality_types:
+        _validate_eg_centrality_type(centrality_type)
 
     # ADD THIS: Move to CPU for centrality computations
     train_edges = train_edges.cpu()
@@ -590,14 +768,36 @@ def compute_all_centrality_equality_gains(
         cent_kwargs = {}
         if cent_type == 'closeness':
             cent_kwargs['use_sampling'] = use_sampling_closeness
-            cent_kwargs['epsilon'] = 0.1
+            cent_kwargs['epsilon'] = closeness_epsilon
+            cent_kwargs['sample_size'] = closeness_sample_size
+            cent_kwargs['random_seed'] = closeness_random_seed
 
-        # Cache control centrality (same for all k values)
+        cache_key = (
+            cent_type,
+            int(num_nodes),
+            bool(use_sampling_closeness),
+            int(closeness_random_seed),
+            closeness_sample_size,
+            float(closeness_epsilon),
+        )
+
+        # Control centrality is shared across K and, in configuration sweeps,
+        # across every inference-only beta/boost combination.
         try:
-            cent_control = build_control_centrality(
-                train_edges, test_edges, num_nodes, cent_type, **cent_kwargs
+            cached = (
+                control_cache.get(cache_key)
+                if control_cache is not None else None
             )
-            gini_ctrl = compute_gini_coefficient(cent_control)
+            if cached is None:
+                cent_control = build_control_centrality(
+                    train_edges, test_edges, num_nodes, cent_type,
+                    **cent_kwargs
+                )
+                gini_ctrl = compute_gini_coefficient(cent_control)
+                if control_cache is not None:
+                    control_cache[cache_key] = (cent_control, gini_ctrl)
+            else:
+                cent_control, gini_ctrl = cached
         except Exception as e:
             print(f"  Failed to compute control centrality ({str(e)})")
             for k in k_values:

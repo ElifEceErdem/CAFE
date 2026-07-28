@@ -12,6 +12,7 @@ Output:
   - <DatasetName>_summary_table_match.pdf    (1×3 per dataset)
 """
 
+import argparse
 import os
 import numpy as np
 import pandas as pd
@@ -33,8 +34,19 @@ EG_METRICS = ["Degree EG@10", "PageRank EG@10", "Closeness EG@10"]
 # (see METHOD_RENAME in generate_final_tables.py).
 EXCLUDE_METHODS = {"pure_gnn", "node2vec", "deepwalk"}
 
+# Weak-tie diversification rows emitted by generate_final_tables.py
+# (WEAK_TIE_GROUP / WEAK_TIE_CONTROL_GROUP there).  --no_weak_tie drops both.
+WEAK_TIE_METHODS = {"WeakTie", "WeakTie (no re-rank)"}
+
 # ASF weights — identical to generate_final_tables.py
 ASF_WEIGHTS = np.array([0.5, 0.3, 0.1, 0.1])
+
+# Methods added after the RecSys submission. They get FIXED colors so the
+# tab20 assignment of all previously published methods does not shift
+# (reviewers compare against the old figures).
+FIXED_COLORS = {
+    "HLGNN+RA": "#555555",  # fusion-only control (HL-GNN + beta*RA)
+}
 
 # The four objectives used in the ASF (column names after wrangling)
 ASF_OBJ_COLS = [
@@ -469,16 +481,62 @@ def plot_single_dataset(df, dataset, output_path, color_map, best_per_col):
 # ---------------------------------------------------------------------------
 
 def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    parser = argparse.ArgumentParser(
+        description="Plot the Precision@10 vs Equality Gain Pareto figures")
+    parser.add_argument("--csv", type=str, default=CSV_PATH,
+                        help="table1_precision_equality_gain.csv to plot "
+                             "(default: the copy in analysis/)")
+    parser.add_argument("--out_dir", type=str, default=OUTPUT_DIR,
+                        help="Directory for the output PDFs (default: analysis/plots)")
+    parser.add_argument("--exclude", type=str, default="",
+                        help="Comma-separated method names to drop, as spelled in "
+                             "the CSV (e.g. 'WeakTie,WeakTie (no re-rank)'). "
+                             "Excluded methods are removed before the Pareto "
+                             "frontier and best-per-metric diamonds are computed.")
+    parser.add_argument("--no_weak_tie", action="store_true",
+                        help=f"Shorthand for --exclude {','.join(sorted(WEAK_TIE_METHODS))}")
+    parser.add_argument("--suffix", type=str, default="",
+                        help="Suffix appended to the output filenames, e.g. "
+                             "'_no_weaktie', so existing PDFs are not overwritten")
+    cli = parser.parse_args()
+    csv_path = os.path.abspath(cli.csv)
+    out_dir = os.path.abspath(cli.out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+
+    excluded = {m.strip() for m in cli.exclude.split(",") if m.strip()}
+    if cli.no_weak_tie:
+        excluded |= WEAK_TIE_METHODS
 
     print("Loading data...")
-    df = load_and_wrangle(CSV_PATH)
-    print(f"  {len(df)} (Method, Dataset) entries loaded")
+    print(f"  csv    : {csv_path}")
+    print(f"  out_dir: {out_dir}")
+    print(f"  suffix : {cli.suffix or '(none)'}")
+    df_all = load_and_wrangle(csv_path)
+    print(f"  {len(df_all)} (Method, Dataset) entries loaded")
 
-    # Colour map (same deterministic assignment as original)
-    methods = df["Method"].unique()
+    # Colour map (same deterministic assignment as original).
+    # Post-submission methods (FIXED_COLORS) are excluded from the tab20
+    # enumeration so the colours of all pre-existing methods are unchanged.
+    # Built from the *unfiltered* method list so that --exclude does not shift
+    # the colours of the methods that stay in the figure.
+    methods = df_all["Method"].unique()
     cmap = plt.get_cmap("tab20")
-    color_map = {m: cmap(i % 20) for i, m in enumerate(methods)}
+    color_map = {m: cmap(i % 20)
+                 for i, m in enumerate(m for m in methods if m not in FIXED_COLORS)}
+    for m, c in FIXED_COLORS.items():
+        if m in methods:
+            color_map[m] = c
+
+    # ---- Apply --exclude / --no_weak_tie ----
+    df = df_all
+    if excluded:
+        unknown = sorted(excluded - set(methods))
+        if unknown:
+            print(f"  WARNING: --exclude names not present in CSV: {unknown}")
+        dropped = sorted(excluded & set(methods))
+        df = df_all[~df_all["Method"].isin(excluded)].copy()
+        print(f"  Excluded methods: {dropped or '(none matched)'}  "
+              f"→ {len(df)} entries remain")
 
     # ---- Pre-compute highlights per dataset ----
     col_bests = {}   # dataset → {column_label: method name}
@@ -501,15 +559,17 @@ def main():
 
     # ---- Plot ----
     print("\nPlotting full grid (table-matched)...")
-    plot_grid(df, os.path.join(OUTPUT_DIR, "full_comparison_matrix_table_match.pdf"),
+    plot_grid(df,
+              os.path.join(out_dir,
+                           f"full_comparison_matrix_table_match{cli.suffix}.pdf"),
               color_map, col_bests, available_datasets)
 
     print("\nPlotting per-dataset summaries (table-matched)...")
     for dataset in available_datasets:
-        fname = f"{dataset}_summary_table_match.pdf"
+        fname = f"{dataset}_summary_table_match{cli.suffix}.pdf"
         plot_single_dataset(
             df, dataset,
-            os.path.join(OUTPUT_DIR, fname),
+            os.path.join(out_dir, fname),
             color_map,
             best_per_col=col_bests[dataset],
         )

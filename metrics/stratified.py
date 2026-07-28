@@ -21,7 +21,7 @@ def compute_stratified_equality_gain_by_source(
     high_degree_nodes: List[int],
     num_nodes: int,
     k: int,
-    mode: str = 'indegree'
+    graph_semantics: str = 'simple_undirected'
 ) -> Tuple[float, float]:
     """
     Compute Equality Gain for recommendations made BY low/high-degree SOURCE nodes.
@@ -105,7 +105,7 @@ def compute_stratified_metrics(
     k: int = 10,
     low_percentile: float = 20.0,
     high_percentile: float = 80.0,
-    fairness_mode: str = 'indegree',
+    graph_semantics: str = 'simple_undirected',
     stratification_mode: str = 'source'  
 ) -> Dict[str, Tuple[float, float]]:
     """
@@ -120,7 +120,8 @@ def compute_stratified_metrics(
         k: Cutoff value (default: 10)
         low_percentile: Threshold for low-degree nodes (default: 20%)
         high_percentile: Threshold for high-degree nodes (default: 80%)
-        fairness_mode: Degree counting mode
+        graph_semantics: Structural-EG graph semantics. This is separate
+            from the directed exposure ``fairness_mode``.
         stratification_mode: 'source', 'target', or 'mixed' (default: 'source')
     
     Returns:
@@ -148,20 +149,20 @@ def compute_stratified_metrics(
     if stratification_mode == 'source':
         eq_gain_low, eq_gain_high = compute_stratified_equality_gain_by_source(
             recs_by_u, train_edges, test_edges, low_nodes, high_nodes,
-            num_nodes, k, fairness_mode
+            num_nodes, k, graph_semantics
         )
         mode_label = "SOURCE"
     elif stratification_mode == 'target':
         eq_gain_low, eq_gain_high = compute_stratified_equality_gain_by_target(
             recs_by_u, train_edges, test_edges, low_nodes, high_nodes,
-            num_nodes, k, fairness_mode
+            num_nodes, k, graph_semantics
         )
         mode_label = "TARGET"
     elif stratification_mode == 'mixed':
         # Use old function (renamed)
         eq_gain_low, eq_gain_high = compute_stratified_equality_gain(
             recs_by_u, train_edges, test_edges, low_nodes, high_nodes,
-            num_nodes, k, fairness_mode
+            num_nodes, k, graph_semantics
         )
         mode_label = "MIXED (deprecated)"
     else:
@@ -288,7 +289,7 @@ def compute_stratified_equality_gain(
     high_degree_nodes: List[int],
     num_nodes: int,
     k: int,
-    mode: str = 'indegree'
+    graph_semantics: str = 'simple_undirected'
 ) -> Tuple[float, float]:
     """
     Compute Equality Gain separately for low-degree and high-degree subgraphs.
@@ -316,12 +317,12 @@ def compute_stratified_equality_gain(
     
     # Compute for low-degree subgraph
     deg_ctrl_low = build_control_degree_distribution(
-        train_low, test_low, num_nodes, mode
+        train_low, test_low, num_nodes, graph_semantics
     )
     gini_ctrl_low = compute_gini_coefficient(deg_ctrl_low)
     
     deg_pred_low = build_predicted_degree_distribution(
-        train_low, recs_low, num_nodes, k, mode
+        train_low, recs_low, num_nodes, k, graph_semantics
     )
     gini_pred_low = compute_gini_coefficient(deg_pred_low)
     
@@ -340,12 +341,12 @@ def compute_stratified_equality_gain(
     
     # Compute for high-degree subgraph
     deg_ctrl_high = build_control_degree_distribution(
-        train_high, test_high, num_nodes, mode
+        train_high, test_high, num_nodes, graph_semantics
     )
     gini_ctrl_high = compute_gini_coefficient(deg_ctrl_high)
     
     deg_pred_high = build_predicted_degree_distribution(
-        train_high, recs_high, num_nodes, k, mode
+        train_high, recs_high, num_nodes, k, graph_semantics
     )
     gini_pred_high = compute_gini_coefficient(deg_pred_high)
     
