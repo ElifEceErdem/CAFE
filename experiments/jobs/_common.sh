@@ -16,6 +16,16 @@ REPO=/home/eerdem/workspace/CAFE
 DATA=${REPO}/data/SNAP
 TS=$(date +%Y%m%d_%H%M%S)
 
+# The runners are invoked by bare filename from ${REPO}/experiments (or
+# ${REPO}/analysis), so a wrong REPO surfaces as "can't open file" several
+# minutes into the job rather than here. Check it up front.
+for d in "${REPO}/experiments" "${REPO}/analysis" "${DATA}"; do
+  if [ ! -d "$d" ]; then
+    echo "FATAL: expected directory does not exist: $d" >&2
+    exit 1
+  fi
+done
+
 DATASETS=(ego-facebook oklahoma unc pokec_n brightkite)
 DS=${DATASETS[${SLURM_ARRAY_TASK_ID:-0}]}
 

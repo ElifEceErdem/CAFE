@@ -20,7 +20,17 @@
 # run_precision_by_coreness.py builds its own parser and takes no --predictor
 # and no fast-eval flags, so it gets ${SPLIT} rather than ${EXTRA}.
 
-source "$(dirname "$0")/_common.sh"
+# NOTE: under Slurm $0 is a copy of this script in the spool directory, so
+# dirname "$0" does NOT point at experiments/jobs. Source by absolute path and
+# fail loudly -- set -e lives inside _common.sh, so a silent miss here would
+# leave every variable unset and run the python calls from the wrong cwd.
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
 cd ${REPO}/analysis
 
 python -u run_precision_by_coreness.py \

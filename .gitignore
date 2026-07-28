@@ -43,7 +43,6 @@ data/SNAP/*
 # ---------------------------------------------------------------------------
 /results/
 /results_repro/*
-!/results_repro/tables/
 /results_egfix/
 /results_penalty_reduction/
 /results_pen_smoke/
@@ -52,8 +51,6 @@ data/SNAP/*
 /logs/
 **/slurm-*.out
 
-# Keep the tables, but not the multi-megabyte PDFs regenerated on every build.
-/results_repro/tables/*.pdf
 
 # ---------------------------------------------------------------------------
 # Analysis intermediates
@@ -89,3 +86,10 @@ analysis/best_configs.csv
 
 # Slurm output for the table suite (recreated on submit)
 experiments/jobs/logs/
+
+# ---------------------------------------------------------------------------
+/ToRS_paper/
+/ToRS_sample_papers/
+/recsys_reviews_rebuttal/
+/tests/
+RecSys_2026_paper_486 (3).pdf

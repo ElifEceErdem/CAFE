@@ -18,7 +18,17 @@
 # --save_recommendations True is what lets bin_perturbation_size.py recover the
 # EXACT deduplicated per-bin edge count instead of the K|B_g| upper bound.
 
-source "$(dirname "$0")/_common.sh"
+# NOTE: under Slurm $0 is a copy of this script in the spool directory, so
+# dirname "$0" does NOT point at experiments/jobs. Source by absolute path and
+# fail loudly -- set -e lives inside _common.sh, so a silent miss here would
+# leave every variable unset and run the python calls from the wrong cwd.
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
 cd ${REPO}/analysis
 
 python -u run_stratified_cafe.py ${COMMON} \
