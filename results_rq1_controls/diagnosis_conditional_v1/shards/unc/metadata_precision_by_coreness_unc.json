@@ -1,0 +1,24 @@
+{
+  "clustering_definition": "exact simple-undirected local clustering coefficient",
+  "dataset": "unc",
+  "evaluation_users": "nodes incident to at least one test edge",
+  "k": 10,
+  "methods": [
+    "CN",
+    "RA",
+    "AA",
+    "LightGCN",
+    "HL-GNN"
+  ],
+  "num_bins_requested": 10,
+  "precision_rows": 49455,
+  "split_fingerprint": "597bca9f9e095f401d83163f89c823aff90d3b3a951629fc57b7a3dbcc831c78",
+  "split_seed": 42,
+  "status": "complete",
+  "structural_features": "training graph only",
+  "training_seeds": [
+    42,
+    43,
+    44
+  ]
+}

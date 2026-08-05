@@ -1,0 +1,14 @@
+{
+  "degree_coreness": {
+    "cells": 25,
+    "positive_beta": 18,
+    "positive_ci_excludes_zero": 17,
+    "positive_holm_0_05": 12
+  },
+  "degree_coreness_clustering": {
+    "cells": 25,
+    "positive_beta": 9,
+    "positive_ci_excludes_zero": 4,
+    "positive_holm_0_05": 4
+  }
+}

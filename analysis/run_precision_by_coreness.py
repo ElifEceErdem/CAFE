@@ -22,6 +22,8 @@ Usage:
 import os
 import sys
 import argparse
+import hashlib
+import json
 import torch
 import numpy as np
 import pandas as pd
@@ -52,6 +54,7 @@ from core.ra_features import compute_ra_scores
 from metrics.centrality_equality_gain import (
     compute_degree_equality_gain_by_source_bins_for_models,
 )
+from metrics.graph_utils import canonicalize_undirected_edges
 
 
 def argument():
@@ -106,6 +109,8 @@ def argument():
     parser.add_argument('--train_node_emb', type=str2bool, default=True)
     parser.add_argument('--encoder', type=str, default='HLGNN')
     parser.add_argument('--split_file', type=str, default='')
+    parser.add_argument('--data_split_seed', type=int, default=42,
+                        help='Fixed random-split seed (ignored by Brightkite temporal split)')
 
     return parser.parse_args()
 
@@ -476,6 +481,23 @@ def build_test_edge_dict(pos_test_edge):
     return test_dict
 
 
+def split_fingerprint(split_edge, num_nodes):
+    """Hash the canonical train/test edge sets used by the diagnosis shard."""
+    digest = hashlib.sha256()
+    digest.update(f'num_nodes={int(num_nodes)}\n'.encode())
+    for split_name in ('train', 'test'):
+        edges = canonicalize_undirected_edges(
+            split_edge[split_name]['edge'].cpu(), num_nodes
+        )
+        digest.update(f'{split_name}:{len(edges)}\n'.encode())
+        digest.update(
+            edges.to(dtype=torch.int64).contiguous().numpy().astype(
+                '<i8', copy=False
+            ).tobytes()
+        )
+    return digest.hexdigest()
+
+
 # ========================================================================
 # Coreness Binning and Plotting
 # ========================================================================
@@ -680,6 +702,9 @@ def compute_eg_by_coreness_bin(all_recs, coreness_np, bin_assignments, bin_label
                 'coreness_bin': b,
                 'coreness_bin_label': bin_labels[b],
                 'equality_gain': eg,
+                'gini_control': gini_control,
+                'gini_pred': gini_pred,
+                'n_sources': n_sources,
             })
             print(
                 f"    Bin {bin_labels[b]}: EG={eg:.2f}% "
@@ -926,6 +951,8 @@ def main():
 
         pos_test_edge = split_edge['test']['edge'].to(device)
         train_edges = split_edge['train']['edge'].to(device)
+        fingerprint = split_fingerprint(split_edge, num_nodes)
+        training_seed = int(args.seed + run)
 
         # Compute coreness on training graph
         print("\nComputing coreness...")
@@ -961,6 +988,21 @@ def main():
         cn_sparse = adj.dot(adj).tocsr()
         print(f"  CN (A²): {cn_sparse.nnz} nonzeros")
 
+        # Exact local clustering on the simple undirected TRAINING graph.  The
+        # numerator sum_v A_uv(A^2)_uv equals twice the triangles incident to u.
+        if np.any(adj.diagonal() != 0):
+            raise ValueError('Training adjacency contains self-loops')
+        train_degree_np = np.asarray(adj.sum(axis=1)).reshape(-1)
+        closed_wedges = np.asarray(
+            cn_sparse.multiply(adj).sum(axis=1)
+        ).reshape(-1)
+        denominator = train_degree_np * (train_degree_np - 1.0)
+        clustering_np = np.zeros(num_nodes, dtype=np.float64)
+        valid = denominator > 0
+        clustering_np[valid] = closed_wedges[valid] / denominator[valid]
+        if not np.isfinite(clustering_np).all():
+            raise ValueError('Non-finite local clustering coefficient')
+
         # RA: A * D_inv * A^T
         ra_sparse = compute_ra_scores(adj)
         print(f"  RA: {ra_sparse.nnz} nonzeros")
@@ -995,6 +1037,7 @@ def main():
         import gc; gc.collect()
 
         # ---- Train & Evaluate: LightGCN ----
+        set_seed(training_seed)
         h_lgcn = train_lightgcn(data, split_edge, num_nodes, device, args)
         h_lgcn = h_lgcn.to(device)
         print("\nGenerating LightGCN recommendations...")
@@ -1008,6 +1051,7 @@ def main():
             torch.cuda.empty_cache()
 
         # ---- Train & Evaluate: HL-GNN ----
+        set_seed(training_seed)
         model_hlgnn, h_hlgnn = train_hlgnn(data, split_edge, num_nodes, device, args)
         print("\nGenerating HL-GNN recommendations...")
         recs_hlgnn = generate_recs_hlgnn(
@@ -1027,7 +1071,12 @@ def main():
                     'precision': p,
                     'node_coreness': coreness_np[u],
                     'degree': float(degrees_np[u]),
-                    'run': run,
+                    'clustering_coefficient': float(clustering_np[u]),
+                    'n_test_targets': int(len(test_edge_dict.get(u, set()))),
+                    'run': training_seed,
+                    'training_seed': training_seed,
+                    'split_seed': int(args.data_split_seed),
+                    'split_fingerprint': fingerprint,
                 })
             return pd.DataFrame(rows)
 
@@ -1063,7 +1112,7 @@ def main():
 
         # Keep inputs for per-run EG computation (run after coreness bins are assigned)
         per_run_eg_inputs.append({
-            'run': run,
+            'run': training_seed,
             'train_edges': train_edges.cpu(),
             'test_edges': pos_test_edge.cpu(),
             'num_nodes': num_nodes,
@@ -1090,7 +1139,10 @@ def main():
     print("\nComputing Equality Gain by Coreness Bin (per run)...")
     per_run_eg_dfs = []
     for rd in per_run_eg_inputs:
-        print(f"\n--- EG run {rd['run'] + 1}/{len(per_run_eg_inputs)} ---")
+        print(
+            f"\n--- EG training seed {rd['run']} "
+            f"({len(per_run_eg_dfs) + 1}/{len(per_run_eg_inputs)}) ---"
+        )
         # Bin assignments for this run: each node's bin comes from full_df's
         # global quantile binning, filtered to this run (a node's coreness
         # and thus its bin can differ between runs due to different splits).
@@ -1135,6 +1187,31 @@ def main():
     eg_csv_path = os.path.join(args.save_dir, f'eg_by_coreness_{args.data_name}.csv')
     eg_df.to_csv(eg_csv_path, index=False)
     print(f"Aggregated EG data saved to {eg_csv_path}")
+
+    fingerprints = sorted(full_df['split_fingerprint'].astype(str).unique())
+    if len(fingerprints) != 1:
+        raise ValueError(f'Expected one fixed split fingerprint, got {fingerprints}')
+    metadata = {
+        'status': 'complete',
+        'dataset': args.data_name,
+        'methods': ['CN', 'RA', 'AA', 'LightGCN', 'HL-GNN'],
+        'training_seeds': [int(args.seed + run) for run in range(args.runs)],
+        'split_seed': int(args.data_split_seed),
+        'split_fingerprint': fingerprints[0],
+        'k': int(args.K),
+        'num_bins_requested': int(args.num_bins),
+        'evaluation_users': 'nodes incident to at least one test edge',
+        'structural_features': 'training graph only',
+        'clustering_definition': 'exact simple-undirected local clustering coefficient',
+        'precision_rows': int(len(full_df)),
+    }
+    metadata_path = os.path.join(
+        args.save_dir, f'metadata_precision_by_coreness_{args.data_name}.json'
+    )
+    temporary_metadata = f'{metadata_path}.tmp.{os.getpid()}'
+    with open(temporary_metadata, 'w') as handle:
+        json.dump(metadata, handle, indent=2, sort_keys=True)
+    os.replace(temporary_metadata, metadata_path)
 
     # Plot stacked bar chart (compact bar chart version for paper)
     print("\nGenerating stacked bar chart...")

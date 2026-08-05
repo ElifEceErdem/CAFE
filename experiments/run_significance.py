@@ -95,7 +95,13 @@ def argument():
     # Metrics
     parser.add_argument('--k_values', type=str, default='10',
                         help='comma-separated K values for EG/centrality metrics')
-    parser.add_argument('--centrality_types', type=str, default='pagerank,closeness')
+    # Same contract as run_cafe.py / run_coreness_inverse.py: a LIST on args,
+    # so downstream consumers reading args.centrality_types do not iterate a
+    # bare string character by character.
+    parser.add_argument('--centrality_types',
+                        type=lambda s: (['pagerank', 'closeness'] if s is None
+                                        else [x.strip() for x in s.split(',')]),
+                        default='pagerank,closeness')
     parser.add_argument('--use_demographics', type=str2bool, default=True)
 
     parser.add_argument('--out_csv', type=str, required=True)
@@ -355,7 +361,7 @@ def main():
     if 10 not in k_values:
         raise ValueError("--k_values must include 10")
     rec_k = max(max(k_values), 10)
-    centrality_types = [x.strip() for x in args.centrality_types.split(',')]
+    centrality_types = list(args.centrality_types)
     seeds = list(range(args.seed_start, args.seed_start + args.num_seeds))
     done = load_done_seeds(args.out_csv)
 

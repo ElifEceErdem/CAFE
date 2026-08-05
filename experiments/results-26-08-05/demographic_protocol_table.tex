@@ -1,0 +1,48 @@
+\subcaption*{(a) $\Delta$SP@10 ($\times 10^{-3}$)}
+\begin{tabular}{llrrrr}
+\toprule
+ & & \multicolumn{2}{c}{Absolute value} & \multicolumn{2}{c}{Split-resampled paired difference} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Dataset & Method & Fixed split & Split-resampled & vs.\ HL-GNN & vs.\ HL-GNN+RA \\
+\midrule
+Oklahoma & HL-GNN & $1.064 \pm 0.048$ & $1.139 \pm 0.053$ & --- & --- \\
+ & HL-GNN+RA & $1.002 \pm 0.016$ & $1.058 \pm 0.030$ & --- & --- \\
+ & CAFE-In & $0.923 \pm 0.011$ & $0.984 \pm 0.037$ & $-0.156 \pm 0.048$*** & $-0.074 \pm 0.015$*** \\
+ & CAFE-Pre & $0.914 \pm 0.040$ & $0.967 \pm 0.054$ & $-0.172 \pm 0.055$*** & $-0.091 \pm 0.033$*** \\
+\addlinespace[2pt]
+Pokec-n & HL-GNN & $0.023 \pm 0.000$ & $0.022 \pm 0.001$ & --- & --- \\
+ & HL-GNN+RA & $0.021 \pm 0.000$ & $0.021 \pm 0.001$ & --- & --- \\
+ & CAFE-In & -- & $0.019 \pm 0.001$ & $-0.003 \pm 0.001$*** & $-0.002 \pm 0.000$*** \\
+ & CAFE-Pre & -- & $0.021 \pm 0.001$ & $-0.001 \pm 0.001$* & $-0.000 \pm 0.000$ \\
+\addlinespace[2pt]
+UNC & HL-GNN & $0.085 \pm 0.029$ & $0.051 \pm 0.037$ & --- & --- \\
+ & HL-GNN+RA & $0.124 \pm 0.016$ & $0.077 \pm 0.016$ & --- & --- \\
+ & CAFE-In & $0.137 \pm 0.008$ & $0.084 \pm 0.020$ & $+0.033 \pm 0.026$* & $+0.007 \pm 0.013$ \\
+ & CAFE-Pre & $0.089 \pm 0.021$ & $0.067 \pm 0.035$ & $+0.016 \pm 0.030$ & $-0.010 \pm 0.028$ \\
+\bottomrule
+\end{tabular}
+\vspace{6pt}
+
+\subcaption*{(b) $\Delta$EO@10 ($\times 10^{-3}$)}
+\begin{tabular}{llrrrr}
+\toprule
+ & & \multicolumn{2}{c}{Absolute value} & \multicolumn{2}{c}{Split-resampled paired difference} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Dataset & Method & Fixed split & Split-resampled & vs.\ HL-GNN & vs.\ HL-GNN+RA \\
+\midrule
+Oklahoma & HL-GNN & $12.95 \pm 7.17$ & $17.08 \pm 4.51$ & --- & --- \\
+ & HL-GNN+RA & $15.78 \pm 3.02$ & $29.52 \pm 5.53$ & --- & --- \\
+ & CAFE-In & $13.01 \pm 2.17$ & $28.80 \pm 5.50$ & $+11.71 \pm 5.83$** & $-0.73 \pm 2.60$ \\
+ & CAFE-Pre & $20.17 \pm 4.45$ & $29.53 \pm 6.75$ & $+12.45 \pm 4.73$** & $+0.00 \pm 5.47$ \\
+\addlinespace[2pt]
+Pokec-n & HL-GNN & $19.71 \pm 2.03$ & $22.09 \pm 2.43$ & --- & --- \\
+ & HL-GNN+RA & $21.48 \pm 0.98$ & $22.57 \pm 3.16$ & --- & --- \\
+ & CAFE-In & -- & $22.08 \pm 2.86$ & $-0.00 \pm 4.77$ & $-0.49 \pm 1.89$ \\
+ & CAFE-Pre & -- & $22.77 \pm 3.63$ & $+0.68 \pm 5.02$ & $+0.20 \pm 1.02$ \\
+\addlinespace[2pt]
+UNC & HL-GNN & $13.91 \pm 8.56$ & $14.29 \pm 8.37$ & --- & --- \\
+ & HL-GNN+RA & $23.67 \pm 2.93$ & $18.77 \pm 7.74$ & --- & --- \\
+ & CAFE-In & $21.22 \pm 2.74$ & $19.31 \pm 7.84$ & $+5.02 \pm 9.18$ & $+0.54 \pm 2.43$ \\
+ & CAFE-Pre & $14.71 \pm 4.07$ & $16.22 \pm 9.92$ & $+1.93 \pm 6.32$ & $-2.54 \pm 5.71$ \\
+\bottomrule
+\end{tabular}

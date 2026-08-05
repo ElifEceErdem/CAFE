@@ -1,0 +1,46 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16GB
+#SBATCH --time=04:00:00
+#SBATCH --job-name=build_asf
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/build_tables_asf_%A.out
+
+# Build the Option-3 (ASF-re-selected) tables from results_asf/.
+# Refreshes the shared symlinks first, in case the Option-1 jobs finished
+# after setup_asf_tree.sh was last run.
+
+source ~/.bashrc
+conda activate hl_gnn
+set -uo pipefail
+
+REPO=/home/eerdem/workspace/CAFE
+BASE=${REPO}/results_asf
+TABLES=${BASE}/tables
+cd ${REPO}
+
+bash experiments/jobs/setup_asf_tree.sh
+mkdir -p ${TABLES}
+
+echo ""
+echo "############## Tables 4 / 8 / 7 from results_asf ##############"
+python -u analysis/generate_final_tables.py    --base_dir ${BASE} --out_dir ${TABLES}
+python -u analysis/generate_table4.py          --base_dir ${BASE} --out_dir ${TABLES}
+python -u analysis/generate_table5.py          --base_dir ${BASE} --out_dir ${TABLES}
+python -u analysis/generate_ablation_tables.py --base_dir ${BASE} --out_dir ${TABLES}
+python -u analysis/generate_merged_ablation_table.py \
+    --tables_dir ${TABLES} --out ${TABLES}/ablation_merged.tex
+python -u analysis/plot_precision_eg_tradeoff_table_match.py \
+    --csv ${TABLES}/table1_precision_equality_gain.csv --out_dir ${TABLES}
+
+echo ""
+echo "############## Option 1 vs Option 3, side by side ##############"
+python -u analysis/compare_option1_option3.py \
+    --option1 ${REPO}/results_repro/tables/table1_precision_equality_gain.csv \
+    --option3 ${TABLES}/table1_precision_equality_gain.csv \
+    --out ${TABLES}/option1_vs_option3.csv
+
+echo ""
+echo "Option-3 tables in ${TABLES}"
+ls -la ${TABLES}

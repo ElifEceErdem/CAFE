@@ -155,11 +155,15 @@ def build_protocol_table(fixed, resampled, contrasts):
             if di:
                 lines.append(r"\addlinespace[2pt]")
             for mi, meth in enumerate(METHODS):
-                fm, fs = fixed[(ds, meth, m)]
+                # A method whose fixed-split rerun has not landed yet keeps its
+                # row and renders '--' instead of aborting the whole table.
+                fm_fs = fixed.get((ds, meth, m))
+                fixed_cell = ("--" if fm_fs is None
+                              else fmt_pair(fm_fs[0], fm_fs[1], scale, digits))
                 sub = resampled[(ds, m)][meth]
                 cells = [DATASET_LABELS[ds] if mi == 0 else "",
                          METHOD_LABELS[meth],
-                         fmt_pair(fm, fs, scale, digits),
+                         fixed_cell,
                          fmt_pair(sub.mean(), sub.std(ddof=1), scale, digits)]
                 for ref in ["HL-GNN", "Fusion"]:
                     if meth in ("HL-GNN", "Fusion"):

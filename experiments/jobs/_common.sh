@@ -32,20 +32,29 @@ DS=${DATASETS[${SLURM_ARRAY_TASK_ID:-0}]}
 # Published configurations (analysis/best_configs.csv; mirrored in
 # experiments/tables/_framework.py -- change both together).
 case ${DS} in
+#
+# NOTE: CAFE-In^-B and CAFE-Pre^-B are separately selected configurations, NOT
+# the full pipeline's config with the boost switched off. Deriving them from
+# IN_*/PRE_* silently runs the wrong arm.
   ego-facebook) IN_LF=0.3;  IN_BETA=1.0; IN_LAM=0.5
                 PRE_A=0.05; PRE_BETA=0.5; PRE_LAM=0.3; FUSION_BETA=1.0
+                INB_LF=0.3; INB_BETA=1.0; PREB_A=1.0; PREB_BETA=0.1
                 CI_IN=0.05; CI_PRE=1.0;  MB_POST=0.1 ;;
   oklahoma)     IN_LF=0.3;  IN_BETA=5.0; IN_LAM=0.5
                 PRE_A=1.0;  PRE_BETA=0.5; PRE_LAM=0.5; FUSION_BETA=5.0
+                INB_LF=0.1; INB_BETA=5.0; PREB_A=0.5; PREB_BETA=5.0
                 CI_IN=1.0;  CI_PRE=1.0;  MB_POST=0.3 ;;
   unc)          IN_LF=1.0;  IN_BETA=5.0; IN_LAM=0.5
                 PRE_A=1.0;  PRE_BETA=1.0; PRE_LAM=0.5; FUSION_BETA=5.0
+                INB_LF=0.5; INB_BETA=5.0; PREB_A=0.3; PREB_BETA=5.0
                 CI_IN=0.05; CI_PRE=0.5;  MB_POST=1.0 ;;
   pokec_n)      IN_LF=0.05; IN_BETA=1.0; IN_LAM=0.1
                 PRE_A=0.05; PRE_BETA=2.0; PRE_LAM=0.5; FUSION_BETA=5.0
+                INB_LF=0.1; INB_BETA=0.5; PREB_A=0.3; PREB_BETA=2.0
                 CI_IN=0.1;  CI_PRE=0.3;  MB_POST=0.1 ;;
   brightkite)   IN_LF=0.05; IN_BETA=5.0; IN_LAM=0.1
                 PRE_A=0.3;  PRE_BETA=2.0; PRE_LAM=0.5; FUSION_BETA=5.0
+                INB_LF=0.1; INB_BETA=5.0; PREB_A=0.3; PREB_BETA=2.0
                 CI_IN=0.1;  CI_PRE=0.1;  MB_POST=0.1 ;;
   *) echo "unknown dataset '${DS}'"; exit 1 ;;
 esac

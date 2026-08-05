@@ -1,0 +1,13 @@
+{
+  "csv_sha256": "a047960e98eb17c8ec215770edbc00fc71ce883826d1970bc3c49d71b87f68fb",
+  "dataset": "oklahoma",
+  "eg_graph_semantics": "simple_undirected_set_union",
+  "penalty_reduction": "mean",
+  "protocol": "headline",
+  "seeds": [
+    47
+  ],
+  "selected_configs_sha256": "a6162e8bd89893b38bf41b5782a7996a34ea6364be8731b23690fb69f945ebef",
+  "source_manifest_sha256": "c0797a01472ab23ff15c31372912402dc8afe640bbc943f8cb0d466705e9ca4e",
+  "status": "complete"
+}

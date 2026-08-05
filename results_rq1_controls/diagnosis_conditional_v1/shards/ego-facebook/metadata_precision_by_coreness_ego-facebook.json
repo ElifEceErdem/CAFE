@@ -1,0 +1,24 @@
+{
+  "clustering_definition": "exact simple-undirected local clustering coefficient",
+  "dataset": "ego-facebook",
+  "evaluation_users": "nodes incident to at least one test edge",
+  "k": 10,
+  "methods": [
+    "CN",
+    "RA",
+    "AA",
+    "LightGCN",
+    "HL-GNN"
+  ],
+  "num_bins_requested": 10,
+  "precision_rows": 47715,
+  "split_fingerprint": "9fd5015d193eb2a15df607fbf7ea080b5de099045a62a3a111601910d4e8111e",
+  "split_seed": 42,
+  "status": "complete",
+  "structural_features": "training graph only",
+  "training_seeds": [
+    42,
+    43,
+    44
+  ]
+}

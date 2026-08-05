@@ -1,0 +1,102 @@
+Method,Dataset,Config_Key,Method_Detail
+AA,brightkite,,AA
+AA,ego-facebook,,AA
+AA,oklahoma,,AA
+AA,pokec_n,,AA
+AA,unc,,AA
+CN,brightkite,,CN
+CN,ego-facebook,,CN
+CN,oklahoma,,CN
+CN,pokec_n,,CN
+CN,unc,,CN
+CI-In,brightkite,lambda_0.1,Coreness Inverse Inproc (lambda_0.1)
+CI-In,ego-facebook,lambda_0.05,Coreness Inverse Inproc (lambda_0.05)
+CI-In,oklahoma,lambda_1.0,Coreness Inverse Inproc (lambda_1.0)
+CI-In,unc,lambda_0.05,Coreness Inverse Inproc (lambda_0.05)
+CI-Pre,brightkite,lambda_0.1,Coreness Inverse Preproc (lambda_0.1)
+CI-Pre,ego-facebook,lambda_1.0,Coreness Inverse Preproc (lambda_1.0)
+CI-Pre,oklahoma,lambda_1.0,Coreness Inverse Preproc (lambda_1.0)
+CI-Pre,unc,lambda_0.5,Coreness Inverse Preproc (lambda_0.5)
+MB-Post,brightkite,lambda_0.1,Coreness Mobility Boost Postproc (lambda_0.1)
+MB-Post,ego-facebook,lambda_0.1,Coreness Mobility Boost Postproc (lambda_0.1)
+MB-Post,oklahoma,lambda_0.3,Coreness Mobility Boost Postproc (lambda_0.3)
+MB-Post,pokec_n,lambda_0.1,Coreness Mobility Boost Postproc (lambda_0.1)
+MB-Post,unc,lambda_1.0,Coreness Mobility Boost Postproc (lambda_1.0)
+Cross-Link Bias,brightkite,,Cross-Link Bias
+Cross-Link Bias,ego-facebook,,Cross-Link Bias
+Cross-Link Bias,oklahoma,,Cross-Link Bias
+Cross-Link Bias,pokec_n,,Cross-Link Bias
+Cross-Link Bias,unc,,Cross-Link Bias
+FairAdj,oklahoma,,FairAdj
+FairAdj,pokec_n,,FairAdj
+FairAdj,unc,,FairAdj
+HLGNN+RA,brightkite,lambda_fair_0.0_beta_5.0_lam_0.0,Fusion Only (lambda_fair_0.0_beta_5.0_lam_0.0)
+HLGNN+RA,ego-facebook,lambda_fair_0.0_beta_1.0_lam_0.0,Fusion Only (lambda_fair_0.0_beta_1.0_lam_0.0)
+HLGNN+RA,oklahoma,lambda_fair_0.0_beta_5.0_lam_0.0,Fusion Only (lambda_fair_0.0_beta_5.0_lam_0.0)
+HLGNN+RA,pokec_n,lambda_fair_0.0_beta_5.0_lam_0.0,Fusion Only (lambda_fair_0.0_beta_5.0_lam_0.0)
+HLGNN+RA,unc,lambda_fair_0.0_beta_5.0_lam_0.0,Fusion Only (lambda_fair_0.0_beta_5.0_lam_0.0)
+HLGNN,brightkite,beta_0.0_lambda_0.0,HLGNN (beta_0.0_lambda_0.0)
+HLGNN,ego-facebook,beta_0.0_lambda_0.0,HLGNN (beta_0.0_lambda_0.0)
+HLGNN,oklahoma,beta_0.0_lambda_0.0,HLGNN (beta_0.0_lambda_0.0)
+HLGNN,unc,beta_0.0_lambda_0.0,HLGNN (beta_0.0_lambda_0.0)
+CAFE-P,brightkite,beta_1.0_lambda_0.5,Hybrid Analysis (beta_1.0_lambda_0.5)
+CAFE-P,ego-facebook,beta_0.1_lambda_0.3,Hybrid Analysis (beta_0.1_lambda_0.3)
+CAFE-P,oklahoma,beta_1.0_lambda_0.5,Hybrid Analysis (beta_1.0_lambda_0.5)
+CAFE-P,unc,beta_2.0_lambda_0.5,Hybrid Analysis (beta_2.0_lambda_0.5)
+CAFE-In-B,brightkite,lambda_fair_0.1_beta_5.0_lam_0.0,Hybrid Penalized C (Inproc) (lambda_fair_0.1_beta_5.0_lam_0.0)
+CAFE-In-B,ego-facebook,lambda_fair_0.3_beta_1.0_lam_0.0,Hybrid Penalized C (Inproc) (lambda_fair_0.3_beta_1.0_lam_0.0)
+CAFE-In-B,oklahoma,lambda_fair_0.1_beta_5.0_lam_0.0,Hybrid Penalized C (Inproc) (lambda_fair_0.1_beta_5.0_lam_0.0)
+CAFE-In-B,unc,lambda_fair_0.5_beta_5.0_lam_0.0,Hybrid Penalized C (Inproc) (lambda_fair_0.5_beta_5.0_lam_0.0)
+CAFE-Pre-B,brightkite,preproc_alpha_0.3_beta_2.0_lam_0.0,Hybrid Penalized C (Preproc) (preproc_alpha_0.3_beta_2.0_lam_0.0)
+CAFE-Pre-B,ego-facebook,preproc_alpha_1.0_beta_0.1_lam_0.0,Hybrid Penalized C (Preproc) (preproc_alpha_1.0_beta_0.1_lam_0.0)
+CAFE-Pre-B,oklahoma,preproc_alpha_0.5_beta_5.0_lam_0.0,Hybrid Penalized C (Preproc) (preproc_alpha_0.5_beta_5.0_lam_0.0)
+CAFE-Pre-B,unc,preproc_alpha_0.3_beta_5.0_lam_0.0,Hybrid Penalized C (Preproc) (preproc_alpha_0.3_beta_5.0_lam_0.0)
+CAFE-In,brightkite,lambda_fair_0.05_beta_5.0_lam_0.1,Hybrid Penalized D (Inproc) (lambda_fair_0.05_beta_5.0_lam_0.1)
+CAFE-In,ego-facebook,lambda_fair_0.3_beta_1.0_lam_0.5,Hybrid Penalized D (Inproc) (lambda_fair_0.3_beta_1.0_lam_0.5)
+CAFE-In,oklahoma,lambda_fair_0.3_beta_5.0_lam_0.5,Hybrid Penalized D (Inproc) (lambda_fair_0.3_beta_5.0_lam_0.5)
+CAFE-In,unc,lambda_fair_1.0_beta_5.0_lam_0.5,Hybrid Penalized D (Inproc) (lambda_fair_1.0_beta_5.0_lam_0.5)
+CAFE-Pre,brightkite,preproc_alpha_0.3_beta_2.0_lam_0.5,Hybrid Penalized D (Preproc) (preproc_alpha_0.3_beta_2.0_lam_0.5)
+CAFE-Pre,ego-facebook,preproc_alpha_0.05_beta_0.5_lam_0.3,Hybrid Penalized D (Preproc) (preproc_alpha_0.05_beta_0.5_lam_0.3)
+CAFE-Pre,oklahoma,preproc_alpha_1.0_beta_0.5_lam_0.5,Hybrid Penalized D (Preproc) (preproc_alpha_1.0_beta_0.5_lam_0.5)
+CAFE-Pre,unc,preproc_alpha_1.0_beta_1.0_lam_0.5,Hybrid Penalized D (Preproc) (preproc_alpha_1.0_beta_1.0_lam_0.5)
+LBA,oklahoma,,LBA
+LBA,pokec_n,,LBA
+LBA,unc,,LBA
+LTLP,brightkite,,LTLP
+LTLP,ego-facebook,,LTLP
+LTLP,oklahoma,,LTLP
+LTLP,pokec_n,,LTLP
+LTLP,unc,,LTLP
+LightGCN,brightkite,,LightGCN
+LightGCN,ego-facebook,,LightGCN
+LightGCN,oklahoma,,LightGCN
+LightGCN,pokec_n,,LightGCN
+LightGCN,unc,,LightGCN
+MORAL,oklahoma,,MORAL
+MORAL,pokec_n,,MORAL
+MORAL,unc,,MORAL
+PA,brightkite,,PA
+PA,ego-facebook,,PA
+PA,oklahoma,,PA
+PA,pokec_n,,PA
+PA,unc,,PA
+RA,brightkite,,RA
+RA,ego-facebook,,RA
+RA,oklahoma,,RA
+RA,pokec_n,,RA
+RA,unc,,RA
+SSNet,brightkite,,SSNet
+SSNet,ego-facebook,,SSNet
+SSNet,oklahoma,,SSNet
+SSNet,pokec_n,,SSNet
+SSNet,unc,,SSNet
+TailSteak,brightkite,,TailSteak
+TailSteak,ego-facebook,,TailSteak
+TailSteak,oklahoma,,TailSteak
+TailSteak,pokec_n,,TailSteak
+TailSteak,unc,,TailSteak
+random,brightkite,,random
+random,ego-facebook,,random
+random,oklahoma,,random
+random,pokec_n,,random
+random,unc,,random

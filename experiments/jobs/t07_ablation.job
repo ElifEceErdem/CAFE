@@ -27,7 +27,34 @@ source "${COMMON_SH}"
 cd ${REPO}/experiments
 BASE=${REPO}/results_repro/${DS}
 
+# Resume guard: skip arms that already have a CORRECTED-metric result.
+# Existence alone is not enough -- the pre-2026-07-23 files are still in this
+# tree and skipping on those would make the rerun a no-op.
+#   sbatch --export=ALL,SKIP_EXISTING=1 t07_ablation.job
+SKIP_EXISTING=${SKIP_EXISTING:-0}
+
+arm_done () {  # $1=outdir
+  [ "${SKIP_EXISTING}" = "1" ] || return 1
+  "${PYTHON_BIN:-python}" - "${BASE}/$1" <<'PYEOF'
+import glob, json, os, sys
+for p in sorted(glob.glob(os.path.join(sys.argv[1], 'results_*.json'))):
+    if p.endswith('.partial.json'):
+        continue
+    try:
+        info = json.load(open(p)).get('experiment_info', {})
+    except Exception:
+        continue
+    if info.get('eg_graph_semantics') == 'simple_undirected_set_union':
+        sys.exit(0)
+sys.exit(1)
+PYEOF
+  local rc=$?
+  [ $rc -eq 0 ] && echo "--- skipping $1 on ${DS}: already complete on the corrected EG metric"
+  return $rc
+}
+
 run_ci () {  # $1=fairness_method  $2=lambda  $3=outdir
+  arm_done "$3" && return 0
   mkdir -p ${BASE}/$3
   echo "=== $1 (lambda=$2) on ${DS} ==="
   python -u run_coreness_inverse.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
@@ -40,6 +67,9 @@ mkdir -p ${BASE}/mb_post
 run_ci coreness_inverse_inproc  ${CI_IN}  ci_in
 run_ci coreness_inverse_preproc ${CI_PRE} ci_pre
 
+if arm_done mb_post; then
+  echo "--- mb_post already done"
+else
 echo "=== mb_post (lambda=${MB_POST}) on ${DS} ==="
 python -u run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
     --reranking_approach boost --boosting_mode continuous \
@@ -47,5 +77,6 @@ python -u run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
     --use_stratified False --use_pa_aware False --use_ndkl False \
     --use_degree_plots False \
     --results_file ${BASE}/mb_post/results_mb_post_${DS}_${TS}.json ${SPLIT}
+fi
 
 echo "Done."

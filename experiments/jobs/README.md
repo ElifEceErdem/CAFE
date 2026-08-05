@@ -57,8 +57,36 @@ gated on the dataset having a sensitive attribute, which is why the draft marks
 the target-side audit unavailable on Ego-FB and Brightkite. The gate is gone —
 the audit pools groups and never needed an attribute. Only ΔSP does.
 
+**The cluster is heterogeneous — check where your jobs land.**
+
+| Feature | Nodes | GPU | Memory |
+|---|---|---|---|
+| `TitanRTX` | node206, node219, node220, node221 | TITAN RTX | 24 GB |
+| `GTX1080Ti` | node201, node203, node205 | GTX 1080 Ti | 11 GB |
+| `TitanX` | node202 | GTX TITAN X | 12 GB |
+| `TitanXpascal` | node204 | TITAN X (Pascal) | 12 GB |
+
+Training *results* are device-independent (up to the cuDNN nondeterminism
+already absorbed by the reported ±std), so Tables 4/7/8/16 do not care. **Table
+12 does**: `t12_runtime.job` pins `--constraint=TitanRTX` because Appendix A.2
+names that device and a mixed-hardware runtime table is meaningless.
+
+To see what a running job actually got:
+
+```bash
+srun --overlap --jobid=<id> bash -lc 'source ~/.bashrc; conda activate hl_gnn;
+  export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:$LD_LIBRARY_PATH;
+  python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"'
+```
+
+`nvidia-smi` is not on the compute nodes' PATH; ask torch instead. Note also
+that `scontrol show job` reports the GPU under `JOB_GRES` / `TresPerNode`, not
+under `AllocTRES` — an empty `AllocTRES` gres field does **not** mean the job
+is CPU-only.
+
 **Attribute baselines on Pokec-n need memory.** FairAdj and LBA build N×N
-identity features:
+identity features (66,569² floats ≈ 17.7 GB), which OOMs on anything but a
+TITAN RTX:
 `sbatch --constraint=TitanRTX --array=3 t04_baselines.job`.
 
 ## After the jobs finish

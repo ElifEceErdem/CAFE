@@ -1,0 +1,62 @@
+{
+  "code_sha256": {
+    "analysis/diagnosis_conditional_logit.py": "a6983d1990d128e4fead86d76b6917ab1d51145a9b57fa9a7b948c04e0df66fb",
+    "analysis/rq1_structural_controls.py": "6c29b69cd070069878e1452813a8c18307283ba03f8f11d286d3ba50d6423679",
+    "analysis/run_precision_by_coreness.py": "be698f32c7d594b7d1484b669e913adb3f62e647d66fdacbd87da3f7e0c2787f",
+    "backbone/snap_dataset.py": "30a177d1e9656edd3e98a6475065c000a441d7cd476b7a37e390a7545827a6d9",
+    "core/data_loader.py": "2cf5194b3ba062f287c2455d67832c0f2e9dd544dab2120a1ae346580916e3e1",
+    "metrics/centrality_equality_gain.py": "f635b2a096caa7ce3168f1e44628ee55ea5151d4ed9f57917c03da0c52ebc065",
+    "metrics/graph_utils.py": "f8e11b8f0760d4ad4897000e2035e5dba575641b2ce3b1f3d4a40b5bd14b869f"
+  },
+  "dataset": "ego-facebook",
+  "deterministic_scorers": [
+    "CN",
+    "RA",
+    "AA"
+  ],
+  "feature_standardization": {
+    "clustering": {
+      "mean": 0.4934047450878628,
+      "population_sd": 0.17125675130372814
+    },
+    "coreness": {
+      "mean": 26.983967305878654,
+      "population_sd": 23.379381248604886
+    },
+    "log1p_test_targets": {
+      "mean": 1.5865020278284938,
+      "population_sd": 0.7316099206306406
+    },
+    "log_degree": {
+      "mean": 3.351217539765407,
+      "population_sd": 1.003954466440995
+    }
+  },
+  "inference": "pooled fixed-split model-seed rows with source-user-clustered sandwich covariance",
+  "input_sha256": {
+    "metadata_precision_by_coreness_ego-facebook.json": "15b18e386116a19bf792739b44948cdf6691a8072a648aa9dd4443c1d25d2e65",
+    "precision_by_coreness_ego-facebook.csv": "751b8eeb6db54406d7809da39d18f90d0238a65d1e525a32681936e40b30f82a"
+  },
+  "methods": [
+    "CN",
+    "RA",
+    "AA",
+    "LightGCN",
+    "HL-GNN"
+  ],
+  "outputs_sha256": {
+    "diagnosis_logit_coefficients.csv": "e782f651f7f442730a53549b898d488d8941b375c31998d5ca52b098bf9bad9d",
+    "diagnosis_logit_diagnostics.csv": "c2b6e36eb69113bf4271a95dbf39fd6d876e697970b712ad2bb69163add0ea12",
+    "diagnosis_per_user_hits.csv": "3a560ca13d7c7035fe6e1805153c732666c96b6865e77d41f65912711157dd21"
+  },
+  "profile": "rq1_diagnosis_conditional_hit_v1",
+  "schema_version": 1,
+  "split_fingerprint": "9fd5015d193eb2a15df607fbf7ea080b5de099045a62a3a111601910d4e8111e",
+  "split_seed": 42,
+  "status": "complete",
+  "training_seeds": [
+    42,
+    43,
+    44
+  ]
+}

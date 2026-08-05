@@ -1,0 +1,106 @@
+#!/bin/bash
+#SBATCH --job-name=t22_diag_logit
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=100:00:00
+#SBATCH --array=0-4%5
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t22_diag_logit_%A_%a.out
+
+# Full five-dataset conditional-hit table for the ORIGINAL RQ1 diagnosis
+# cohort: CN, RA, AA, LightGCN, HL-GNN. Each dataset uses the headline split
+# (random split seed 42; Brightkite's canonical proxy-temporal artifact) and
+# model seeds 42..44. The analysis reports both
+#
+#   hit@10 ~ z(log degree) + z(coreness)
+#
+# and the local-clustering-augmented control, with source-user-clustered CIs.
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+REPO=/home/eerdem/workspace/CAFE
+DATA=${REPO}/data/SNAP
+CAMPAIGN=${DIAG_LOGIT_CAMPAIGN:-${REPO}/results_rq1_controls/diagnosis_conditional_v1}
+
+TASK_ID=${SLURM_ARRAY_TASK_ID:?submit this file as a Slurm array}
+if (( TASK_ID < 0 || TASK_ID > 4 )); then
+    echo "ERROR: array task must be in 0..4" >&2
+    exit 2
+fi
+DATASETS=(ego-facebook oklahoma unc pokec_n brightkite)
+DATASET=${DATASETS[TASK_ID]}
+TASK_DIR=${CAMPAIGN}/shards/${DATASET}
+mkdir -p "${TASK_DIR}"
+
+cd "${REPO}"
+if [[ -f "${TASK_DIR}/_SUCCESS" ]]; then
+    python -u analysis/diagnosis_conditional_logit.py finalize \
+        --campaign-dir "${CAMPAIGN}" --if-complete
+    exit 0
+fi
+RAW_CSV=${TASK_DIR}/precision_by_coreness_${DATASET}.csv
+METADATA=${TASK_DIR}/metadata_precision_by_coreness_${DATASET}.json
+if [[ -e "${RAW_CSV}" || -e "${METADATA}" ]]; then
+    echo "ERROR: incomplete diagnosis task exists in ${TASK_DIR}." >&2
+    echo "Move that dataset directory aside before retrying." >&2
+    exit 2
+fi
+
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+export MPLCONFIGDIR=/tmp/cafe-diag-logit-mpl-${SLURM_JOB_ID}-${TASK_ID}
+export XDG_CACHE_HOME=/tmp/cafe-diag-logit-cache-${SLURM_JOB_ID}-${TASK_ID}
+export PYTHONHASHSEED=42
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+SPLIT_ARGS=()
+if [[ "${DATASET}" == "brightkite" ]]; then
+    SPLIT_ARGS+=(--split_file "${DATA}/brightkite/temporal_split.pt")
+fi
+
+RUN_ARGS=(
+    --data_name "${DATASET}"
+    --data_path "${DATA}"
+    --encoder HLGNN
+    --epochs 500
+    --eval_steps 10
+    --patience 50
+    --batch_size 16384
+    --lr 0.001
+    --runs 3
+    --seed 42
+    --data_split_seed 42
+    --K 10
+    --num_bins 10
+    --num_degree_bins 4
+    --num_coreness_bins 5
+    --mode baseline
+    --save_dir "${TASK_DIR}"
+    "${SPLIT_ARGS[@]}"
+)
+
+conda list --explicit | sed '/^[[:space:]]*$/d' \
+    > "${TASK_DIR}/runtime.conda-explicit.txt"
+printf '%q ' python -u analysis/run_precision_by_coreness.py "${RUN_ARGS[@]}" \
+    > "${TASK_DIR}/command.sh"
+printf '\n' >> "${TASK_DIR}/command.sh"
+
+python -u analysis/run_precision_by_coreness.py "${RUN_ARGS[@]}" \
+    2>&1 | tee "${TASK_DIR}/runner.log"
+
+python -u analysis/diagnosis_conditional_logit.py run \
+    --dataset "${DATASET}" \
+    --input-csv "${RAW_CSV}" \
+    --input-metadata "${METADATA}" \
+    --output-dir "${TASK_DIR}"
+
+python -u analysis/diagnosis_conditional_logit.py finalize \
+    --campaign-dir "${CAMPAIGN}" --if-complete
+
+echo "Diagnosis conditional-logit task complete: ${DATASET}"

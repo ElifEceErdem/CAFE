@@ -1,0 +1,128 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=160:00:00
+#SBATCH --array=0-4
+#SBATCH --job-name=t04_asf
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t04_cafe_asf_%A_%a.out
+
+# OPTION 3 -- CAFE at the ASF-RE-SELECTED configurations.
+#
+# Source of truth for the configs:
+#   results_egfix/20260724_degree_eg_sum_in_v1/todo3/selected_configs.csv
+# (selection profile cafe_in_sum_v1 / corrected_eg_mean_v1, ASF over the
+#  210-config grid scored on the VALIDATION split under the corrected EG
+#  metric, 3 selection runs per config.)
+#
+# Writes to results_asf/ so it can never mix with the Option-1 tree.
+# Array index -> dataset: 0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
+#
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE INTERPRETING THE OUTPUT
+#
+# The ASF re-selection sets lambda_fair = 0 for CAFE-In on Ego-FB, Oklahoma,
+# UNC and Pokec-n. Equation 8's penalty term vanishes at lambda_fair = 0, so on
+# those four networks "CAFE-In" here is fusion + boost with NO in-processing
+# penalty -- i.e. it is CAFE^-P by construction. Only Brightkite
+# (lambda_fair = 1.0) exercises the in-processing stage at all.
+#
+# Consequences:
+#   * the CAFE-In vs CAFE^-P ablation row degenerates on 4 of 5 datasets;
+#     this job therefore SKIPS the redundant CAFE^-P arm where lambda_fair = 0.
+#   * any claim that the in-processing penalty contributes must be re-examined
+#     under this selection, not carried over from the published table.
+# ---------------------------------------------------------------------------
+
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
+cd ${REPO}/experiments
+
+BASE=${REPO}/results_asf/${DS}
+
+# ASF-re-selected configurations (todo3/selected_configs.csv)
+case ${DS} in
+  ego-facebook) A_LF=0.0; A_BETA=0.1; A_LAM=0.5
+                A_ALPHA=1.00; A_PBETA=0.1; A_PLAM=1.0 ;;
+  oklahoma)     A_LF=0.0; A_BETA=0.5; A_LAM=1.0
+                A_ALPHA=1.00; A_PBETA=0.5; A_PLAM=1.0 ;;
+  unc)          A_LF=0.0; A_BETA=5.0; A_LAM=1.0
+                A_ALPHA=1.00; A_PBETA=2.0; A_PLAM=1.0 ;;
+  pokec_n)      A_LF=0.0; A_BETA=5.0; A_LAM=1.0
+                A_ALPHA=0.01; A_PBETA=5.0; A_PLAM=1.0 ;;
+  brightkite)   A_LF=1.0; A_BETA=5.0; A_LAM=1.0
+                A_ALPHA=2.00; A_PBETA=5.0; A_PLAM=1.0 ;;
+esac
+
+# The selection scored candidates under penalty_reduction=sum. It only affects
+# the in-processing loss, so it is a no-op wherever lambda_fair = 0 and for
+# every preproc arm -- but pass it so Brightkite matches its own selection.
+RED="--penalty_reduction sum"
+
+SKIP_EXISTING=${SKIP_EXISTING:-0}
+
+arm_done () {  # $1=outdir  $2=glob -- true only for a CORRECTED-metric result
+  [ "${SKIP_EXISTING}" = "1" ] || return 1
+  local dir="${BASE}/$1" glob="${2:-results_*.json}"
+  "${PYTHON_BIN:-python}" - "$dir" "$glob" <<'PY'
+import glob, json, os, sys
+d, g = sys.argv[1], sys.argv[2]
+for p in sorted(glob.glob(os.path.join(d, g))):
+    if p.endswith('.partial.json'):
+        continue
+    try:
+        info = json.load(open(p)).get('experiment_info', {})
+    except Exception:
+        continue
+    if info.get('eg_graph_semantics') == 'simple_undirected_set_union':
+        print(os.path.basename(p)); sys.exit(0)
+sys.exit(1)
+PY
+  local rc=$?
+  [ $rc -eq 0 ] && echo "--- skipping $1 on ${DS}: already complete on the corrected EG metric"
+  return $rc
+}
+
+# inproc -> --lambda_fair ; preproc -> --preproc_alpha (see t04_cafe.job)
+run_cafe () {  # $1=mode $2=penalty $3=beta $4=lambda_mob $5=boost $6=outdir
+  arm_done "$6" && return 0
+  mkdir -p ${BASE}/$6
+  local pen_flag="--lambda_fair"
+  [ "$1" = "preproc" ] && pen_flag="--preproc_alpha"
+  echo "=== $6 on ${DS} ($1, $pen_flag=$2, beta=$3, lambda_mob=$4) ==="
+  python -u run_cafe.py ${COMMON} --runs 10 ${RED} \
+      --penalization_mode $1 --use_mobility_boost $5 \
+      ${pen_flag} "$2" --beta_ra "$3" --lambda_mobility "$4" \
+      --coreness_alpha 1.0 ${EG} \
+      --results_file ${BASE}/$6/results_$6_${DS}_${TS}.json ${EXTRA}
+}
+
+run_cafe inproc  ${A_LF}    ${A_BETA}  ${A_LAM}  True  cafe_in
+run_cafe preproc ${A_ALPHA} ${A_PBETA} ${A_PLAM} True  cafe_pre
+run_cafe inproc  ${A_LF}    ${A_BETA}  0.0       False cafe_in_b
+run_cafe preproc ${A_ALPHA} ${A_PBETA} 0.0       False cafe_pre_b
+
+# CAFE^-P = fusion + boost, no penalty. Identical to CAFE-In wherever the ASF
+# selection already set lambda_fair = 0, so only run it where it differs.
+if [ "${A_LF}" = "0.0" ]; then
+  echo "--- CAFE^-P skipped on ${DS}: lambda_fair=0 makes CAFE-In identical to it."
+  echo "    Reuse the cafe_in rows for CAFE^-P, or state the equivalence."
+else
+  mkdir -p ${BASE}/cafe_p
+  if ! arm_done cafe_p "results_cafe_p_${DS}_*.json"; then
+    echo "=== cafe_p on ${DS} (beta=${A_BETA}, lambda_mob=${A_LAM}) ==="
+    python -u run_cafe_p.py ${COMMON} --runs 10 --coreness_alpha 1.0 \
+        --use_equality_gain True --use_centrality_gain True \
+        --beta_ra "${A_BETA}" --lambda_mobility "${A_LAM}" \
+        --results_file ${BASE}/cafe_p/results_cafe_p_${DS}_${TS}.json ${SPLIT}
+  fi
+fi
+
+echo "Done."

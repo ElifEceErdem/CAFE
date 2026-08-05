@@ -1,0 +1,13 @@
+{
+  "csv_sha256": "6c09740ae1be1a4cec7ddfa55282d9125ed125a76ef000b90caf625dedbdcb78",
+  "dataset": "unc",
+  "eg_graph_semantics": "simple_undirected_set_union",
+  "penalty_reduction": "mean",
+  "protocol": "headline",
+  "seeds": [
+    42
+  ],
+  "selected_configs_sha256": "a6162e8bd89893b38bf41b5782a7996a34ea6364be8731b23690fb69f945ebef",
+  "source_manifest_sha256": "c0797a01472ab23ff15c31372912402dc8afe640bbc943f8cb0d466705e9ca4e",
+  "status": "complete"
+}

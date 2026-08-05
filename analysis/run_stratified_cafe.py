@@ -112,6 +112,16 @@ def argument():
     parser.add_argument('--save_recommendations', type=lambda x: x.lower() == 'true',
                         default=False,
                         help='Save compressed top-K recommendation matrices')
+    parser.add_argument(
+        '--split_seed', type=int, default=42,
+        help='Random split seed; ignored for the canonical Brightkite temporal split',
+    )
+    parser.add_argument(
+        '--allow_brightkite_random_control',
+        type=lambda x: x.lower() == 'true',
+        default=False,
+        help='Explicit opt-in for the Brightkite random-split protocol control',
+    )
 
     return parser.parse_args()
 
@@ -242,24 +252,36 @@ def main():
             )
         source_manifest_sha256 = _sha256_file(args.source_manifest)
 
+    if args.val_ratio < 0 or args.test_ratio < 0 or args.val_ratio + args.test_ratio >= 1:
+        raise ValueError(
+            'val_ratio and test_ratio must be non-negative and sum to less than 1'
+        )
+
     split_sha256 = None
+    force_random_brightkite = (
+        str(args.data_name).lower() == 'brightkite'
+        and isinstance(args.split_file, str)
+        and args.split_file.strip().lower() == 'random'
+    )
     if str(args.data_name).lower() == 'brightkite':
         split_path = args.split_file or os.path.join(
             args.data_path, 'brightkite', 'temporal_split.pt'
         )
-        if str(split_path).lower() == 'random':
+        if force_random_brightkite and not args.allow_brightkite_random_control:
             raise ValueError(
-                "The egfix campaign does not permit a random Brightkite split"
+                'A random Brightkite split is permitted only with '
+                '--allow_brightkite_random_control True'
             )
-        if not os.path.isfile(split_path):
+        if not force_random_brightkite and not os.path.isfile(split_path):
             raise FileNotFoundError(
                 f"Brightkite temporal split not found: {split_path}"
             )
-        split_sha256 = _sha256_file(split_path)
+        if not force_random_brightkite:
+            split_sha256 = _sha256_file(split_path)
 
     # The source-stratified experiment holds the graph split fixed and varies
     # only model initialization/sampling.
-    args.data_split_seed = 42
+    args.data_split_seed = int(args.split_seed) if force_random_brightkite else 42
     set_seed(args.seed)
     device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
     os.makedirs(args.save_dir, exist_ok=True)
@@ -281,7 +303,11 @@ def main():
     if args.include_fusion:
         print(f"Fusion  : beta={fusion_beta} (no penalty, no boost)")
     print(f"Training seed base: {args.seed}")
-    print("Split seed: 42 (fixed; temporal artifact for Brightkite)")
+    split_protocol = 'brightkite_random_control' if force_random_brightkite else (
+        'brightkite_proxy_temporal' if str(args.data_name).lower() == 'brightkite'
+        else 'fixed_random'
+    )
+    print(f"Split protocol: {split_protocol} | split seed: {args.data_split_seed}")
     print(f"Penalty reduction: {args.penalty_reduction}")
     print("=" * 80)
 
@@ -298,6 +324,17 @@ def main():
         train_edges = split_edge['train']['edge'].to(device)
         pos_test_edge = split_edge['test']['edge'].to(device)
         split_fingerprint = _split_fingerprint(split_edge, num_nodes)
+        split_edge_counts = {
+            name: int(len(canonicalize_undirected_edges(
+                split_edge[name]['edge'].cpu(), num_nodes
+            )))
+            for name in ('train', 'valid', 'test')
+        }
+        split_edge_total = sum(split_edge_counts.values())
+        split_edge_fractions = {
+            name: count / split_edge_total
+            for name, count in split_edge_counts.items()
+        }
         training_seed = int(args.seed + run)
         print(f"Training seed: {training_seed}")
 
@@ -399,7 +436,7 @@ def main():
                 'degree': float(degrees_np[u]),
                 'run': training_seed,
                 'training_seed': training_seed,
-                'split_seed': 42,
+                'split_seed': int(args.data_split_seed),
                 'split_fingerprint': split_fingerprint,
             } for u, p in precisions.items()]
             return pd.DataFrame(rows)
@@ -423,9 +460,12 @@ def main():
             'status': 'complete',
             'dataset': args.data_name,
             'training_seed': training_seed,
-            'split_seed': 42,
+            'split_seed': int(args.data_split_seed),
+            'split_protocol': split_protocol,
             'split_fingerprint': split_fingerprint,
             'split_sha256': split_sha256,
+            'split_edge_counts': split_edge_counts,
+            'split_edge_fractions': split_edge_fractions,
             'num_nodes': int(num_nodes),
             'num_eval_users': len(eval_users),
             'k': int(args.K),
@@ -491,7 +531,7 @@ def main():
         )
         eg_df_run['run'] = rd['run']
         eg_df_run['training_seed'] = rd['run']
-        eg_df_run['split_seed'] = 42
+        eg_df_run['split_seed'] = int(args.data_split_seed)
         per_run_eg_dfs.append(eg_df_run)
 
     eg_df_all_runs = pd.concat(per_run_eg_dfs, ignore_index=True)
@@ -584,6 +624,8 @@ def main():
         'source_manifest_sha256': source_manifest_sha256,
         'eg_graph_semantics': 'simple_undirected_set_union',
         'penalty_reduction': args.penalty_reduction,
+        'split_protocol': split_protocol,
+        'split_seed': int(args.data_split_seed),
     }
     temp_metadata = f"{metadata_path}.tmp.{os.getpid()}"
     with open(temp_metadata, 'w') as handle:

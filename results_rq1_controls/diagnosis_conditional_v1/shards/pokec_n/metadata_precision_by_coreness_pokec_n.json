@@ -1,0 +1,24 @@
+{
+  "clustering_definition": "exact simple-undirected local clustering coefficient",
+  "dataset": "pokec_n",
+  "evaluation_users": "nodes incident to at least one test edge",
+  "k": 10,
+  "methods": [
+    "CN",
+    "RA",
+    "AA",
+    "LightGCN",
+    "HL-GNN"
+  ],
+  "num_bins_requested": 10,
+  "precision_rows": 503250,
+  "split_fingerprint": "923589a52fee637944558a14c0bcbf8766a2883005edaf1a54b9b69f56e0e3bc",
+  "split_seed": 42,
+  "status": "complete",
+  "structural_features": "training graph only",
+  "training_seeds": [
+    42,
+    43,
+    44
+  ]
+}

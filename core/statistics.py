@@ -8,6 +8,23 @@ import json
 import numpy as np
 from datetime import datetime
 
+
+def _eg_semantics_marker():
+    """Report which Equality-Gain definition actually produced this run.
+
+    This used to be a hardcoded 'simple_undirected_set_union' string, which
+    meant a tree running the pre-2026-07-23 metric still stamped its results
+    as corrected -- indistinguishable from a real corrected run, including to
+    the CAFE_REQUIRE_EG_SEMANTICS filter in generate_final_tables.py. Derive
+    it from the module in use instead: only the corrected implementation
+    defines SIMPLE_UNDIRECTED.
+    """
+    from metrics import equality_gain as _eg
+    if hasattr(_eg, 'SIMPLE_UNDIRECTED'):
+        return 'simple_undirected_set_union'
+    return 'legacy_indegree_reconstructed'
+
+
 def compute_statistics(all_results):
     """Compute mean and std across multiple runs."""
     if not all_results:
@@ -607,7 +624,7 @@ def create_experiment_info(args, method_name):
         'predictor': getattr(args, 'predictor', 'N/A'),  # <- Add default
         'fairness_method': method_name,
         'fairness_mode': args.fairness_mode,
-        'eg_graph_semantics': 'simple_undirected_set_union',
+        'eg_graph_semantics': _eg_semantics_marker(),
         'num_runs': args.runs,
         'epochs': getattr(args, 'epochs', 0),  # <- Add default
         'batch_size': getattr(args, 'batch_size', 0),  # <- Add default

@@ -64,6 +64,12 @@ analysis/plots/**/exposure_per_node_*.csv
 analysis/plots/**/*_raw.csv
 analysis/plots/**/*.pdf
 
+# Same story for the RQ1 conditional-diagnosis campaign: one row per node per
+# model per run, so the pokec_n shards alone exceed GitHub's 100 MB file limit.
+# The binned/summary siblings (eg_by_coreness_*, diagnosis_logit_*) are kept.
+results_rq1_controls/**/diagnosis_per_user_hits*.csv
+results_rq1_controls/**/precision_by_coreness_*.csv
+
 # Written by generate_final_tables.py against whichever tree was aggregated
 # last, so they go stale silently.  results_repro/tables/ is authoritative.
 analysis/table1_precision_equality_gain.csv
@@ -84,8 +90,10 @@ analysis/best_configs.csv
 *.synctex.gz
 *.toc
 
-# Slurm output for the table suite (recreated on submit)
-experiments/jobs/logs/
+# Slurm output for the table suite. Keep the directory: sbatch cannot create
+# it, and a missing output dir fails the job before the script ever runs.
+experiments/jobs/logs/*
+!experiments/jobs/logs/.gitkeep
 
 # ---------------------------------------------------------------------------
 /ToRS_paper/
@@ -93,3 +101,19 @@ experiments/jobs/logs/
 /recsys_reviews_rebuttal/
 /tests/
 RecSys_2026_paper_486 (3).pdf
+
+/results_rq1_controls
+/results_asf
+/results_k_sensitivity
+/experiments/results-26-08-05
+/experiments/configs/
+audit_p1.md
+audit_p2.md
+audit_p3.md
+audit_p4.md
+audit_p5.md
+
+baselines/__pycache__/
+backbone/__pycache__/
+core/__pycache__/
+

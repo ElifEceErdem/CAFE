@@ -1,0 +1,212 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_k_sensitivity
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=72:00:00
+#SBATCH --array=0-49%5
+#SBATCH --output=/tmp/%x_%A_%a.out
+
+# Fixed-configuration sensitivity at K={5,20}.
+#
+# The array is five datasets x training seeds 42..51. Each task trains each
+# learned method once, produces one top-20 ranking, and evaluates prefixes
+# K=5,10,20. K=10 is an internal runner/reference value; the generated paper
+# tables report only K=5 and K=20.
+#
+# IMPORTANT SAFETY GATE
+# ---------------------
+# The default invocation refuses to train while the known Eq. (8)
+# [B,1] x [B] broadcasting defect is present. After fixing the loss and
+# rerunning CAFE-In configuration selection, both new artifacts must be named
+# explicitly (there is deliberately no publishable default):
+#
+#   sbatch --export=ALL,\
+#K_SENS_SELECTED_CONFIGS=/absolute/new/selected_configs.csv,\
+#K_SENS_UPSTREAM_LINEAGE=/absolute/new/integrity.json \
+#       experiments/jobs/t19_k_sensitivity.job
+#
+# To deliberately measure the current defective implementation instead:
+#   sbatch --export=ALL,K_SENS_ALLOW_NONEDGEWISE_CAFE_IN=True \
+#       experiments/jobs/t19_k_sensitivity.job
+# The resulting LaTeX is explicitly labelled as a legacy-implementation
+# artifact and must not be presented as evidence for Eq. (8).
+
+set -eo pipefail
+if [[ -f "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+conda activate hl_gnn
+set -u
+
+discover_repo() {
+    local script_dir candidate
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+    for candidate in \
+        "${CAFE_REPO:-}" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "${SLURM_SUBMIT_DIR:-}/.." \
+        "${SLURM_SUBMIT_DIR:-}/../.." \
+        "${script_dir}" \
+        "${script_dir}/.." \
+        "${script_dir}/../.."; do
+        if [[ -n "${candidate}" &&
+              -f "${candidate}/experiments/run_k_sensitivity.py" &&
+              -f "${candidate}/experiments/run_significance.py" ]]; then
+            (cd -- "${candidate}" && pwd -P)
+            return 0
+        fi
+    done
+    return 1
+}
+
+REPO="$(discover_repo)" || {
+    echo "ERROR: could not locate the CAFE repository." >&2
+    exit 2
+}
+TASK_ID="${SLURM_ARRAY_TASK_ID:?this file must be submitted as a Slurm array}"
+if (( TASK_ID < 0 || TASK_ID > 49 )); then
+    echo "ERROR: array index must be in 0..49." >&2
+    exit 2
+fi
+
+DATASETS=(ego-facebook oklahoma unc pokec_n brightkite)
+DATASET_INDEX=$((TASK_ID / 10))
+SEED_OFFSET=$((TASK_ID % 10))
+DATASET="${DATASETS[DATASET_INDEX]}"
+TRAINING_SEED=$((42 + SEED_OFFSET))
+
+DEFAULT_TODO3="${REPO}/results_egfix/20260724_degree_eg_sum_in_v1/todo3"
+CAMPAIGN="${K_SENS_CAMPAIGN:-${REPO}/results_k_sensitivity/fixed_config_k5_k20_v1}"
+ALLOW_NONEDGEWISE="${K_SENS_ALLOW_NONEDGEWISE_CAFE_IN:-False}"
+PENALTY_REDUCTION="${K_SENS_PENALTY_REDUCTION:-sum}"
+CONFIGURATION_ORIGIN="${K_SENS_CONFIGURATION_ORIGIN:-validation_selected}"
+case "${ALLOW_NONEDGEWISE}" in
+    True|true|1) ALLOW_NONEDGEWISE=True ;;
+    False|false|0) ALLOW_NONEDGEWISE=False ;;
+    *)
+        echo "ERROR: K_SENS_ALLOW_NONEDGEWISE_CAFE_IN must be True or False." >&2
+        exit 2
+        ;;
+esac
+case "${PENALTY_REDUCTION}" in
+    mean|sum) ;;
+    *)
+        echo "ERROR: K_SENS_PENALTY_REDUCTION must be mean or sum." >&2
+        exit 2
+        ;;
+esac
+case "${CONFIGURATION_ORIGIN}" in
+    validation_selected|legacy_test_selected) ;;
+    *)
+        echo "ERROR: invalid K_SENS_CONFIGURATION_ORIGIN." >&2
+        exit 2
+        ;;
+esac
+
+if [[ "${ALLOW_NONEDGEWISE}" == "True" ]]; then
+    SELECTED_CONFIGS="${K_SENS_SELECTED_CONFIGS:-${DEFAULT_TODO3}/selected_configs.csv}"
+    UPSTREAM_LINEAGE="${K_SENS_UPSTREAM_LINEAGE:-${DEFAULT_TODO3}/finalized/todo3_integrity.json}"
+else
+    if [[ -z "${K_SENS_SELECTED_CONFIGS:-}" ||
+          -z "${K_SENS_UPSTREAM_LINEAGE:-}" ]]; then
+        echo "ERROR: publishable execution requires explicit newly selected" >&2
+        echo "K_SENS_SELECTED_CONFIGS and K_SENS_UPSTREAM_LINEAGE." >&2
+        exit 2
+    fi
+    SELECTED_CONFIGS="${K_SENS_SELECTED_CONFIGS}"
+    UPSTREAM_LINEAGE="${K_SENS_UPSTREAM_LINEAGE}"
+fi
+
+[[ -f "${SELECTED_CONFIGS}" ]] || {
+    echo "ERROR: selected-config manifest not found: ${SELECTED_CONFIGS}" >&2
+    exit 2
+}
+[[ -f "${UPSTREAM_LINEAGE}" ]] || {
+    echo "ERROR: upstream integrity artifact not found: ${UPSTREAM_LINEAGE}" >&2
+    exit 2
+}
+
+LEGACY_BEST_SELECTED="${REPO}/experiments/configs/legacy_best_configs_selected.csv"
+if [[ "${SELECTED_CONFIGS}" == "${LEGACY_BEST_SELECTED}" ]]; then
+    python "${REPO}/experiments/configs/verify_legacy_best_configs.py"
+    if [[ "${ALLOW_NONEDGEWISE}" != "True" ||
+          "${PENALTY_REDUCTION}" != "mean" ||
+          "${CONFIGURATION_ORIGIN}" != "legacy_test_selected" ]]; then
+        echo "ERROR: analysis/best_configs.csv requires the explicitly" >&2
+        echo "legacy, non-edgewise, mean-reduction execution profile." >&2
+        exit 2
+    fi
+fi
+
+TASK_DIR="${CAMPAIGN}/shards/${DATASET}/seed_${TRAINING_SEED}"
+mkdir -p "${TASK_DIR}"
+
+export LD_LIBRARY_PATH="/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}"
+export MPLCONFIGDIR="/tmp/cafe-k-sens-mpl-${SLURM_JOB_ID}-${TASK_ID}"
+export XDG_CACHE_HOME="/tmp/cafe-k-sens-cache-${SLURM_JOB_ID}-${TASK_ID}"
+export PYTHONHASHSEED="${TRAINING_SEED}"
+mkdir -p "${MPLCONFIGDIR}" "${XDG_CACHE_HOME}"
+
+RUNTIME="${TASK_DIR}/runtime.conda-explicit.txt"
+conda list --explicit | sed '/^[[:space:]]*$/d' > "${RUNTIME}"
+SELECTED_SHA="$(sha256sum "${SELECTED_CONFIGS}" | awk '{print $1}')"
+UPSTREAM_SHA="$(sha256sum "${UPSTREAM_LINEAGE}" | awk '{print $1}')"
+RUNTIME_SHA="$(sha256sum "${RUNTIME}" | awk '{print $1}')"
+KNOWN_NONEDGEWISE_CONFIG_SHA=57b80781dbd15cc367c8c857d92ff535d63084a20ed2110438185f4e49fb13df
+if [[ "${ALLOW_NONEDGEWISE}" != "True" &&
+      "${SELECTED_SHA}" == "${KNOWN_NONEDGEWISE_CONFIG_SHA}" ]]; then
+    echo "ERROR: the supplied configurations were selected under the" >&2
+    echo "known non-edgewise Eq. (8) implementation." >&2
+    exit 2
+fi
+{
+    printf 'profile=fixed_config_k5_k20_v1\n'
+    printf 'array_task_id=%s\n' "${TASK_ID}"
+    printf 'dataset=%s\n' "${DATASET}"
+    printf 'training_seed=%s\n' "${TRAINING_SEED}"
+    printf 'split_seed=42\n'
+    printf 'evaluated_k_values=5,10,20\n'
+    printf 'reported_k_values=5,20\n'
+    printf 'configuration_selection_k=10\n'
+    printf 'configuration_reselection=False\n'
+    printf 'penalty_reduction=%s\n' "${PENALTY_REDUCTION}"
+    printf 'configuration_origin=%s\n' "${CONFIGURATION_ORIGIN}"
+    printf 'eq8_nonedgewise_override=%s\n' "${ALLOW_NONEDGEWISE}"
+    printf 'selected_configs_sha256=%s\n' "${SELECTED_SHA}"
+    printf 'upstream_lineage_sha256=%s\n' "${UPSTREAM_SHA}"
+    printf 'runtime_environment_sha256=%s\n' "${RUNTIME_SHA}"
+} > "${TASK_DIR}/task.env"
+
+RUN_ARGS=(
+    run
+    --dataset "${DATASET}"
+    --seed "${TRAINING_SEED}"
+    --campaign-dir "${CAMPAIGN}"
+    --selected-configs "${SELECTED_CONFIGS}"
+    --upstream-lineage "${UPSTREAM_LINEAGE}"
+    --runtime-manifest "${RUNTIME}"
+    --data-path "${REPO}/data/SNAP"
+    --penalty-reduction "${PENALTY_REDUCTION}"
+    --configuration-origin "${CONFIGURATION_ORIGIN}"
+)
+if [[ "${ALLOW_NONEDGEWISE}" == "True" ]]; then
+    RUN_ARGS+=(--allow-nonedgewise-cafe-in)
+fi
+
+printf '%q ' python -u experiments/run_k_sensitivity.py "${RUN_ARGS[@]}" \
+    > "${TASK_DIR}/wrapper_command.sh"
+printf '\n' >> "${TASK_DIR}/wrapper_command.sh"
+
+cd "${REPO}"
+python -u experiments/run_k_sensitivity.py "${RUN_ARGS[@]}"
+
+# Every successful task attempts strict finalization. A file lock prevents
+# races; the first task observing all 50 verified shards writes the table.
+python -u experiments/run_k_sensitivity.py finalize \
+    --campaign-dir "${CAMPAIGN}" \
+    --if-complete
+
+echo "K-sensitivity task complete: ${DATASET}, seed ${TRAINING_SEED}"

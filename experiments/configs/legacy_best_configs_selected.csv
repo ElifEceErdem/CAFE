@@ -1,0 +1,11 @@
+dataset,variant,penalization_mode,lambda_fair,preproc_alpha,beta,beta_ra,lambda_mobility,config_key,penalty_reduction,selection_evaluation_split,selection_k,source_method,source_best_configs_sha256
+ego-facebook,cafe_in,inproc,0.3,,1.0,1.0,0.5,lambda_fair_0.3_beta_1.0_lam_0.5,mean,test,10,CAFE-In,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+ego-facebook,cafe_pre,preproc,,0.05,0.5,0.5,0.3,preproc_alpha_0.05_beta_0.5_lam_0.3,mean,test,10,CAFE-Pre,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+oklahoma,cafe_in,inproc,0.3,,5.0,5.0,0.5,lambda_fair_0.3_beta_5.0_lam_0.5,mean,test,10,CAFE-In,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+oklahoma,cafe_pre,preproc,,1.0,0.5,0.5,0.5,preproc_alpha_1.0_beta_0.5_lam_0.5,mean,test,10,CAFE-Pre,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+unc,cafe_in,inproc,1.0,,5.0,5.0,0.5,lambda_fair_1.0_beta_5.0_lam_0.5,mean,test,10,CAFE-In,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+unc,cafe_pre,preproc,,1.0,1.0,1.0,0.5,preproc_alpha_1.0_beta_1.0_lam_0.5,mean,test,10,CAFE-Pre,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+pokec_n,cafe_in,inproc,0.05,,1.0,1.0,0.1,lambda_fair_0.05_beta_1.0_lam_0.1,mean,test,10,CAFE-In,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+pokec_n,cafe_pre,preproc,,0.05,2.0,2.0,0.5,preproc_alpha_0.05_beta_2.0_lam_0.5,mean,test,10,CAFE-Pre,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+brightkite,cafe_in,inproc,0.05,,5.0,5.0,0.1,lambda_fair_0.05_beta_5.0_lam_0.1,mean,test,10,CAFE-In,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade
+brightkite,cafe_pre,preproc,,0.3,2.0,2.0,0.5,preproc_alpha_0.3_beta_2.0_lam_0.5,mean,test,10,CAFE-Pre,44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade

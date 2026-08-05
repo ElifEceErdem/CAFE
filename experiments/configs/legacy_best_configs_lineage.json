@@ -1,0 +1,31 @@
+{
+  "adapter": {
+    "policy": "Extract exactly the CAFE-In and CAFE-Pre Config_Key rows for the five headline datasets; parse their named numeric fields without reselection.",
+    "schema_version": 1
+  },
+  "configuration_selection": {
+    "evaluation_cutoff": 10,
+    "evaluation_split": "test",
+    "reselected_for_this_campaign": false,
+    "status": "legacy headline-result selection"
+  },
+  "execution_semantics": {
+    "eq8_edgewise_penalty": false,
+    "fusion_policy": "matched-beta control: Fusion beta equals the CAFE-In beta for the same dataset",
+    "legacy_nonedgewise_cafe_in": true,
+    "penalty_reduction": "mean",
+    "publishable_as_evidence_for_eq8": false
+  },
+  "selected_configs": {
+    "path": "/home/eerdem/workspace/CAFE/experiments/configs/legacy_best_configs_selected.csv",
+    "row_count": 10,
+    "selected_configs_sha256": "a6162e8bd89893b38bf41b5782a7996a34ea6364be8731b23690fb69f945ebef"
+  },
+  "source": {
+    "path": "/home/eerdem/workspace/CAFE/analysis/best_configs.csv",
+    "role": "authoritative input requested for this legacy diagnostic campaign",
+    "sha256": "44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade"
+  },
+  "status": "frozen legacy diagnostic configuration lineage",
+  "use_restriction": "These configurations and the current non-edgewise CAFE-In implementation may be inspected diagnostically, but the resulting CAFE-In values are not evidence for Eq. (8) as written."
+}

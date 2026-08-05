@@ -1,0 +1,134 @@
+{
+  "actual_bins": 6,
+  "dataset": "brightkite",
+  "eg_graph_semantics": "simple_undirected_set_union",
+  "eg_rows": 90,
+  "methods": [
+    "RA",
+    "HL-GNN",
+    "Fusion",
+    "CAFE-In",
+    "CAFE-Pre"
+  ],
+  "penalty_reduction": "mean",
+  "precision_rows": 98700,
+  "runs": [
+    {
+      "cafe_in": {
+        "beta": 5.0,
+        "lambda_fair": 0.05,
+        "lambda_mobility": 0.1
+      },
+      "cafe_pre": {
+        "beta": 2.0,
+        "lambda_mobility": 0.5,
+        "preproc_alpha": 0.3
+      },
+      "dataset": "brightkite",
+      "eg_graph_semantics": "simple_undirected_set_union",
+      "evaluation_split": "test",
+      "fusion_beta": 5.0,
+      "k": 10,
+      "methods": [
+        "RA",
+        "HL-GNN",
+        "Fusion",
+        "CAFE-In",
+        "CAFE-Pre"
+      ],
+      "num_bins_requested": 10,
+      "num_eval_users": 6580,
+      "num_nodes": 58228,
+      "penalty_reduction": "mean",
+      "recommendation_validation_passed": true,
+      "recommendations_file": "recommendations_brightkite_seed42.npz",
+      "recommendations_sha256": "000d38db072af65e238326c9b95c1ac3716ac2c7b25d915ff7d884f500913f5c",
+      "selected_configs_sha256": null,
+      "source_manifest_sha256": null,
+      "split_fingerprint": "2069800c2d304ac84e52bf852fda2c5344c71b287ecf7064219fec211879debf",
+      "split_seed": 42,
+      "split_sha256": "9c85751eb089129bf3f1d889e797d515a653a2213317332b5be4f1731d820118",
+      "status": "complete",
+      "training_seed": 42
+    },
+    {
+      "cafe_in": {
+        "beta": 5.0,
+        "lambda_fair": 0.05,
+        "lambda_mobility": 0.1
+      },
+      "cafe_pre": {
+        "beta": 2.0,
+        "lambda_mobility": 0.5,
+        "preproc_alpha": 0.3
+      },
+      "dataset": "brightkite",
+      "eg_graph_semantics": "simple_undirected_set_union",
+      "evaluation_split": "test",
+      "fusion_beta": 5.0,
+      "k": 10,
+      "methods": [
+        "RA",
+        "HL-GNN",
+        "Fusion",
+        "CAFE-In",
+        "CAFE-Pre"
+      ],
+      "num_bins_requested": 10,
+      "num_eval_users": 6580,
+      "num_nodes": 58228,
+      "penalty_reduction": "mean",
+      "recommendation_validation_passed": true,
+      "recommendations_file": "recommendations_brightkite_seed43.npz",
+      "recommendations_sha256": "22c4e57b8507dc47643fc5fbe02ce83286c0016f45090faaa5669cfcd5c34780",
+      "selected_configs_sha256": null,
+      "source_manifest_sha256": null,
+      "split_fingerprint": "2069800c2d304ac84e52bf852fda2c5344c71b287ecf7064219fec211879debf",
+      "split_seed": 42,
+      "split_sha256": "9c85751eb089129bf3f1d889e797d515a653a2213317332b5be4f1731d820118",
+      "status": "complete",
+      "training_seed": 43
+    },
+    {
+      "cafe_in": {
+        "beta": 5.0,
+        "lambda_fair": 0.05,
+        "lambda_mobility": 0.1
+      },
+      "cafe_pre": {
+        "beta": 2.0,
+        "lambda_mobility": 0.5,
+        "preproc_alpha": 0.3
+      },
+      "dataset": "brightkite",
+      "eg_graph_semantics": "simple_undirected_set_union",
+      "evaluation_split": "test",
+      "fusion_beta": 5.0,
+      "k": 10,
+      "methods": [
+        "RA",
+        "HL-GNN",
+        "Fusion",
+        "CAFE-In",
+        "CAFE-Pre"
+      ],
+      "num_bins_requested": 10,
+      "num_eval_users": 6580,
+      "num_nodes": 58228,
+      "penalty_reduction": "mean",
+      "recommendation_validation_passed": true,
+      "recommendations_file": "recommendations_brightkite_seed44.npz",
+      "recommendations_sha256": "74d9e700924b8010a2ed4101f7c025bc2cdf075eaaf4b7b5cd34593a4e81e0b2",
+      "selected_configs_sha256": null,
+      "source_manifest_sha256": null,
+      "split_fingerprint": "2069800c2d304ac84e52bf852fda2c5344c71b287ecf7064219fec211879debf",
+      "split_seed": 42,
+      "split_sha256": "9c85751eb089129bf3f1d889e797d515a653a2213317332b5be4f1731d820118",
+      "status": "complete",
+      "training_seed": 44
+    }
+  ],
+  "selected_configs_sha256": null,
+  "source_manifest_sha256": null,
+  "status": "complete"
+}

@@ -1,0 +1,109 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=96:00:00
+#SBATCH --array=3
+#SBATCH --job-name=t26_lgab
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t26_legacy_ablation_%A_%a_%x.out
+
+# Extends the t25 reconstruction check to the Table 7 ablation arms on Pokec-n,
+# the way t25 covered CAFE-In / CAFE-Pre on Ego-FB, Oklahoma and UNC.
+# One arm per submission so ci_pre and mb_post run in PARALLEL (~5 h/run x 10
+# runs ~= 49 h each on Pokec-n).
+#
+# Results go to results_legacy_eg_check/, NEVER results_repro/: these are
+# reconstruction checks, and the table generators glob results_repro and would
+# aggregate them into the published tree.
+#
+#   sbatch --export=ALL,ARM=ci_pre,EG_MODE=legacy    experiments/jobs/t26_legacy_eg_ablation.job
+#   sbatch --export=ALL,ARM=mb_post,EG_MODE=corrected experiments/jobs/t26_legacy_eg_ablation.job
+#
+# WHICH EG_MODE PER ARM -- the published Pokec-n row is NOT uniform:
+#   CI-Pre   published -4.50 +/- 0.24  from a sem=None JSON      -> EG_MODE=legacy
+#   MB-Post  published 26.06 +/- 0.13  from a sem=simple_...     -> EG_MODE=corrected
+# Running mb_post under legacy produces a number with no published counterpart
+# to check against; it is a new measurement, not a reproduction.
+#
+# TARGETS (results_repro/tables/table6_ablation_all.tex, Pokec-n block):
+#   CI-Pre   Prec 0.0218+/-0.0002  DegEG  -4.50+/-0.24  PR 21.67+/-0.16  Cl 97.13+/-0.05
+#   MB-Post  Prec 0.0219+/-0.0002  DegEG  26.06+/-0.13  PR 19.00+/-0.21  Cl 97.10+/-0.02
+# Check Precision@10 first: it is metric-independent, so if it does not
+# reproduce, the run differs by more than the EG definition and the Degree EG
+# comparison is inconclusive rather than negative.
+#
+# Both runners take ${SPLIT}, never ${EXTRA}: run_coreness_inverse.py and
+# run_mobility_boost.py reject the fast-eval flags _common.sh puts in ${EXTRA}
+# for the large graphs.
+
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
+cd ${REPO}/experiments
+
+ARM=${ARM:-}
+case "${ARM}" in
+  ci_pre|mb_post) ;;
+  *) echo "FATAL: set ARM=ci_pre or ARM=mb_post via --export=ALL,ARM=..." >&2
+     exit 1 ;;
+esac
+
+EG_MODE=${EG_MODE:-legacy}
+case "${EG_MODE}" in
+  legacy|corrected) ;;
+  *) echo "FATAL: EG_MODE must be 'legacy' or 'corrected'" >&2; exit 1 ;;
+esac
+
+OUT=${REPO}/results_legacy_eg_check/${DS}
+
+# Verify the tree actually carries the metric this submission asked for.  The
+# runners stamp eg_graph_semantics from whichever module is importable, so a
+# mismatch here would silently label the output with the wrong convention.
+EG_MODE=${EG_MODE} python - <<'PY'
+import os, sys
+sys.path[:0] = ['.', '..', '../backbone']
+import metrics.equality_gain as eg
+want = os.environ['EG_MODE']
+have = 'corrected' if hasattr(eg, 'SIMPLE_UNDIRECTED') else (
+       'legacy' if hasattr(eg, '_vectorized_degree_count') else 'unknown')
+if have == 'unknown':
+    sys.exit("FATAL: metrics/equality_gain.py is neither implementation.")
+if have != want:
+    sys.exit(f"FATAL: EG_MODE={want} requested but metrics/equality_gain.py "
+             f"is the {have} implementation. Swap the file and resubmit.")
+print(f"preflight OK: {have} EG in use, as requested")
+PY
+
+echo "=============================================================="
+echo "dataset : ${DS}"
+echo "arm     : ${ARM}"
+echo "eg mode : ${EG_MODE}"
+echo "out dir : ${OUT}"
+echo "lambda  : ci_pre=${CI_PRE}  mb_post=${MB_POST}"
+echo "=============================================================="
+
+mkdir -p ${OUT}/${ARM}
+
+if [ "${ARM}" = "ci_pre" ]; then
+  echo "=== coreness_inverse_preproc (lambda=${CI_PRE}) on ${DS} ==="
+  python -u run_coreness_inverse.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+      --fairness_method coreness_inverse_preproc --lambda_fair "${CI_PRE}" \
+      --use_stratified False --use_pa_aware False --use_ndkl False \
+      --results_file ${OUT}/ci_pre/results_ci_pre_${DS}_${TS}.json ${SPLIT}
+else
+  echo "=== mb_post (lambda=${MB_POST}) on ${DS} ==="
+  python -u run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+      --reranking_approach boost --boosting_mode continuous \
+      --lambda_mobility "${MB_POST}" --lambda_bridge 0.0 \
+      --use_stratified False --use_pa_aware False --use_ndkl False \
+      --use_degree_plots False \
+      --results_file ${OUT}/mb_post/results_mb_post_${DS}_${TS}.json ${SPLIT}
+fi
+
+echo "=== done: ${DS} ${ARM} (${EG_MODE}) ==="

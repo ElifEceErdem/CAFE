@@ -90,9 +90,46 @@ WEAK_TIE_CONTROL_KEY = "lambda_0.0"
 # Data Extraction
 # ---------------------------------------------------------------------------
 
+#: Corrected post-recommendation graph semantics (metrics/equality_gain.py,
+#: rewritten 2026-07-23). Result JSONs written before that carry no marker and
+#: their Degree/PageRank EG columns are on the superseded metric.
+EG_SEMANTICS = "simple_undirected_set_union"
+#: Set CAFE_REQUIRE_EG_SEMANTICS=1 to drop pre-fix result files at extraction
+#: time. Off by default so existing behaviour is unchanged; turn it on whenever
+#: a results tree holds BOTH pre- and post-fix runs for the same configuration,
+#: which would otherwise put both into the Pareto/ASF selection and let it pick
+#: across two different metrics.
+REQUIRE_EG_SEMANTICS = os.environ.get("CAFE_REQUIRE_EG_SEMANTICS", "") == "1"
+
+_EG_SKIPPED = []
+
+
+def _has_corrected_semantics(path):
+    try:
+        with open(path) as fh:
+            info = json.load(fh).get("experiment_info", {})
+    except (OSError, ValueError):
+        return False
+    return info.get("eg_graph_semantics") == EG_SEMANTICS
+
+
 def _json_files(pattern):
-    """glob.glob minus the *.partial.json checkpoint files the runners write."""
-    return sorted(p for p in glob.glob(pattern) if not p.endswith(".partial.json"))
+    """glob.glob minus the *.partial.json checkpoint files the runners write.
+
+    With REQUIRE_EG_SEMANTICS, also drops files that predate the Equality-Gain
+    rewrite; skipped paths are collected in ``_EG_SKIPPED`` so the caller can
+    report them instead of silently losing rows.
+    """
+    paths = sorted(p for p in glob.glob(pattern) if not p.endswith(".partial.json"))
+    if not REQUIRE_EG_SEMANTICS:
+        return paths
+    kept = []
+    for p in paths:
+        if _has_corrected_semantics(p):
+            kept.append(p)
+        else:
+            _EG_SKIPPED.append(p)
+    return kept
 
 
 def safe_get_stat(stats_dict, metric_name):

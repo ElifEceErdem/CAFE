@@ -3,6 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
+#SBATCH --constraint=TitanRTX
 #SBATCH --exclusive
 #SBATCH --mem=32GB
 #SBATCH --time=100:00:00
@@ -10,11 +11,23 @@
 #SBATCH --job-name=t12_rt
 #SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t12_runtime_%A_%a.out
 
-# Table 12 -- wall-clock runtime. --exclusive is not optional: sharing the GPU
-# inflates the training column and invalidates the 1.00x / 1.02-1.07x overhead
-# claims of Section 5.5. The published pokec_n row (8540 +/- 16 s) does not
-# match the current JSON (8797 +/- 351 s, visibly bimodal), which is what
-# contended timing looks like.
+# Table 12 -- wall-clock runtime.
+#
+# --constraint=TitanRTX is NOT optional. This cluster is heterogeneous:
+#   node[206,219-220,221]  TitanRTX      (24 GB)
+#   node[201,203,205]      GTX1080Ti     (11 GB)
+#   node202                TitanX        (12 GB)
+#   node204                TitanXpascal
+# Without the constraint the five array tasks scatter across four GPU models
+# and the rows stop being comparable with each other -- and with Appendix A.2,
+# which states a single NVIDIA TITAN RTX. analysis/generate_runtime_table.py
+# refuses to build a table spanning devices, so a mixed run fails late instead
+# of producing a quietly wrong table.
+#
+# --exclusive is not optional either: sharing the GPU inflates the training
+# column and invalidates the 1.00x / 1.02-1.07x overhead claims of Section 5.5.
+# The published pokec_n row (8540 +/- 16 s) does not match the current JSON
+# (8797 +/- 351 s, visibly bimodal), which is what contended timing looks like.
 
 # NOTE: under Slurm $0 is a copy of this script in the spool directory, so
 # dirname "$0" does NOT point at experiments/jobs. Source by absolute path and

@@ -147,7 +147,15 @@ def argument():
     parser.add_argument('--fairness_mode', type=str, default='indegree')
     parser.add_argument('--use_equality_gain', type=str2bool, default=True)
     parser.add_argument('--use_centrality_gain', type=str2bool, default=True)
-    parser.add_argument('--centrality_types', type=str, default='pagerank,closeness')
+    # Parse to a LIST at argparse time, matching run_coreness_inverse.py and
+    # run_mobility_boost.py. Leaving args.centrality_types as a raw string
+    # breaks every downstream consumer that reads it off `args` rather than
+    # from the local split below -- core.evaluation.compute_baseline_metrics
+    # does exactly that, and iterating the string yields 'p', 'a', 'g', ...
+    parser.add_argument('--centrality_types',
+                        type=lambda s: (['pagerank', 'closeness'] if s is None
+                                        else [x.strip() for x in s.split(',')]),
+                        default='pagerank,closeness')
     parser.add_argument('--selection_mode', type=str2bool, default=False,
                         help='Strict validation-only configuration-selection mode')
     parser.add_argument('--evaluation_split', type=str, default='test',
@@ -299,7 +307,7 @@ def main():
 
     # Parse sweep values
     betas = [float(x) for x in args.beta_ra.split(',')]
-    centrality_types = [x.strip() for x in args.centrality_types.split(',')]
+    centrality_types = list(args.centrality_types)
     if args.selection_mode and not {'pagerank', 'closeness'}.issubset(
         set(centrality_types)
     ):
