@@ -33,8 +33,11 @@ fi
 source "${COMMON_SH}"
 cd ${REPO}/experiments
 
-mkdir -p ${REPO}/results/${DS}/acceptance_eg
-mkdir -p ${REPO}/analysis/plots/coreness_by_group
+T11_RESULTS_ROOT=${T11_RESULTS_ROOT:-${REPO}/results}
+T11_EXPOSURE_DIR=${T11_EXPOSURE_DIR:-${REPO}/analysis/plots/coreness_by_group}
+
+mkdir -p ${T11_RESULTS_ROOT}/${DS}/acceptance_eg
+mkdir -p ${T11_EXPOSURE_DIR}
 
 python -u run_exposure_acceptance.py ${COMMON} \
     --runs 10 --K 10 \
@@ -43,7 +46,7 @@ python -u run_exposure_acceptance.py ${COMMON} \
     --fusion_beta ${IN_BETA} \
     --use_sampling_closeness True \
     --tercile_closure left \
-    --acceptance_csv ${REPO}/results/${DS}/acceptance_eg/acceptance_eg_${DS}.csv \
-    --exposure_dir ${REPO}/analysis/plots/coreness_by_group ${EXTRA}
+    --acceptance_csv ${T11_RESULTS_ROOT}/${DS}/acceptance_eg/acceptance_eg_${DS}.csv \
+    --exposure_dir ${T11_EXPOSURE_DIR} ${EXTRA}
 
 echo "Done."

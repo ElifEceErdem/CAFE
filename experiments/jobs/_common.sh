@@ -14,6 +14,7 @@ set -euo pipefail
 
 REPO=/home/eerdem/workspace/CAFE
 DATA=${REPO}/data/SNAP
+RESULTS_ROOT=${RESULTS_ROOT:-${REPO}/results_repro}
 TS=$(date +%Y%m%d_%H%M%S)
 
 # The runners are invoked by bare filename from ${REPO}/experiments (or

@@ -29,7 +29,7 @@ if [ ! -r "${COMMON_SH}" ]; then
 fi
 source "${COMMON_SH}"
 cd ${REPO}/experiments
-BASE=${REPO}/results_repro/${DS}
+BASE=${RESULTS_ROOT}/${DS}
 
 # CAFE^-P uses its own selected (beta, lambda_mob); see analysis/best_configs.csv
 case ${DS} in

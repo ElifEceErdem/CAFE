@@ -40,7 +40,7 @@ if [ "${DS}" = "oklahoma" ] || [ "${DS}" = "unc" ] || [ "${DS}" = "pokec_n" ]; t
   METHODS="${METHODS},fairadj,lba,moral"
 fi
 
-mkdir -p ${REPO}/results_repro/${DS}
+mkdir -p ${RESULTS_ROOT}/${DS}
 
 python -u run_baselines.py \
     --data_name ${DS} --data_path ${DATA} \
@@ -50,6 +50,6 @@ python -u run_baselines.py \
     --epochs 300 --batch_size 16384 \
     --use_equality_gain True --use_centrality_gain True \
     --centrality_types pagerank,closeness \
-    --results_dir ${REPO}/results_repro ${SPLIT}
+    --results_dir ${RESULTS_ROOT} ${SPLIT}
 
 echo "Done."

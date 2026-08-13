@@ -1,0 +1,27 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8GB
+#SBATCH --time=00:30:00
+#SBATCH --job-name=fig03_pareto
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/fig03_pareto_%j.out
+
+# Figure 3 is a CPU-only rendering step over the Table 4 matrix.  The default
+# paths reproduce the paper artifact; FIG3_CSV and FIG3_OUTPUT_DIR let a
+# validation campaign render in isolation without replacing the paper copy.
+
+source ~/.bashrc
+conda activate hl_gnn
+set -euo pipefail
+
+REPO=/home/eerdem/workspace/CAFE
+FIG3_CSV=${FIG3_CSV:-${REPO}/results_repro/tables/table1_precision_equality_gain.csv}
+FIG3_OUTPUT_DIR=${FIG3_OUTPUT_DIR:-${REPO}/analysis/plots}
+
+cd ${REPO}
+python -u analysis/plot_precision_eg_tradeoff_table_match.py \
+    --csv "${FIG3_CSV}" \
+    --out_dir "${FIG3_OUTPUT_DIR}"
+
+echo "Done."

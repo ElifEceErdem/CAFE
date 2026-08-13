@@ -565,6 +565,9 @@ def main():
         model_order=MODEL_ORDER,
         display_name=DATASET_LABELS.get(args.data_name, args.data_name),
         filename_tag=args.data_name,
+        figure_size=(6, 5.1),
+        font_size=12,
+        legend_inside=True,
     )
 
     # Summary tables for the paper text

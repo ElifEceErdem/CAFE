@@ -10,6 +10,7 @@ bash submit_all.sh                  # everything, aggregation chained after
 sbatch t04_cafe.job                 # one job, all five datasets
 sbatch --array=1 t07_ablation.job   # oklahoma only
 sbatch --array=0,4 t11_exposure.job # the two datasets Table 6(b) is missing
+bash submit_oklahoma_validation.sh  # isolated Oklahoma Tables 4/7/8/11 + Figs 3/4
 ```
 
 Array index → dataset: `0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite`.
@@ -29,6 +30,11 @@ Array index → dataset: `0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
 | `t12_runtime.job` | 12 | ~10, `--exclusive` |
 | `cpu_analyses.job` | 2, 9 | CPU only |
 | `build_tables.job` | verify + build all | CPU only |
+| `fig03_pareto.job` | Fig. 3 rendering from the Table 4 CSV | CPU only |
+
+`submit_oklahoma_validation.sh` writes all new outputs below a timestamped
+`results/validation/` campaign. It never replaces `results_legacy_eg_check`,
+`results_repro`, or the current paper figures.
 
 Estimates come from Table 12's per-run training times × arms × 10 seeds; treat
 them as an ordering, not a budget.

@@ -768,6 +768,9 @@ def plot_stacked_barchart(
     model_order=None,
     display_name=None,
     filename_tag=None,
+    figure_size=(6, 6),
+    font_size=10,
+    legend_inside=False,
 ):
     """
     Compact vertically-stacked grouped bar chart for paper figures.
@@ -795,7 +798,7 @@ def plot_stacked_barchart(
                for b in bin_order]
 
     fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, figsize=(6, 6), sharex=True,
+        2, 1, figsize=figure_size, sharex=True,
         gridspec_kw={'hspace': 0.08}
     )
 
@@ -831,8 +834,11 @@ def plot_stacked_barchart(
                    label=model_name, color=color, alpha=0.85,
                    capsize=2, edgecolor='white', linewidth=0.5)
 
-    ax_top.set_ylabel(f'Precision@{K}', fontsize=10)
-    ax_top.tick_params(axis='y', labelsize=8)
+    tick_font_size = max(font_size - 2, 8)
+    legend_font_size = max(font_size - 3, 8)
+
+    ax_top.set_ylabel(f'Precision@{K}', fontsize=font_size)
+    ax_top.tick_params(axis='y', labelsize=tick_font_size)
     ax_top.grid(axis='y', alpha=0.3, linewidth=0.5)
 
     # ------------------------------------------------------------------
@@ -875,11 +881,12 @@ def plot_stacked_barchart(
 
     ax_bot.axhline(y=0, color='gray', linestyle='--', alpha=0.5,
                    linewidth=0.8)
-    ax_bot.set_ylabel('Equality Gain (%)', fontsize=10)
-    ax_bot.set_xlabel('Node Coreness Group', fontsize=10)
+    ax_bot.set_ylabel('Equality Gain (%)', fontsize=font_size)
+    ax_bot.set_xlabel('Node Coreness Group', fontsize=font_size)
     ax_bot.set_xticks(x)
-    ax_bot.set_xticklabels(xlabels, rotation=45, ha='right', fontsize=8)
-    ax_bot.tick_params(axis='y', labelsize=8)
+    ax_bot.set_xticklabels(xlabels, rotation=45, ha='right',
+                           fontsize=tick_font_size)
+    ax_bot.tick_params(axis='y', labelsize=tick_font_size)
     ax_bot.grid(axis='y', alpha=0.3, linewidth=0.5)
 
     # ------------------------------------------------------------------
@@ -892,14 +899,30 @@ def plot_stacked_barchart(
             handles.append(h)
             labels.append(l)
 
-    fig.legend(handles, labels, loc='upper center',
-               ncol=len(labels), fontsize=8, frameon=False,
-               bbox_to_anchor=(0.5, 1.02),
-               handletextpad=0.3, columnspacing=1.0)
+    if legend_inside:
+        ax_top.legend(
+            handles,
+            labels,
+            loc='upper left',
+            ncol=min(3, len(labels)),
+            fontsize=legend_font_size,
+            frameon=True,
+            framealpha=0.92,
+            edgecolor='0.8',
+            handletextpad=0.3,
+            columnspacing=0.8,
+        )
+        title_y = 0.99
+    else:
+        fig.legend(handles, labels, loc='upper center',
+                   ncol=len(labels), fontsize=legend_font_size, frameon=False,
+                   bbox_to_anchor=(0.5, 1.02),
+                   handletextpad=0.3, columnspacing=1.0)
+        title_y = 1.06
 
     title = display_name if display_name is not None else dataset_name
-    fig.suptitle(f'{title} (K={K})', fontsize=11, fontweight='bold',
-                 y=1.06)
+    fig.suptitle(f'{title} (K={K})', fontsize=font_size + 1,
+                 fontweight='bold', y=title_y)
 
     output_tag = filename_tag if filename_tag is not None else dataset_name
     path = os.path.join(save_dir,

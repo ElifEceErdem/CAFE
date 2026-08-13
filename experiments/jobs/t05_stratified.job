@@ -31,12 +31,14 @@ fi
 source "${COMMON_SH}"
 cd ${REPO}/analysis
 
+STRATIFIED_OUTPUT_DIR=${STRATIFIED_OUTPUT_DIR:-${REPO}/analysis/plots/stratified_cafe}
+
 python -u run_stratified_cafe.py ${COMMON} \
     --runs 3 --K 10 --num_bins 10 \
     --cafe_in_lambda ${IN_LF} --cafe_in_beta ${IN_BETA} --cafe_in_lam ${IN_LAM} \
     --cafe_pre_alpha ${PRE_A} --cafe_pre_beta ${PRE_BETA} --cafe_pre_lam ${PRE_LAM} \
     --include_fusion True --fusion_beta ${IN_BETA} \
     --save_recommendations True \
-    --save_dir ${REPO}/analysis/plots/stratified_cafe ${EXTRA}
+    --save_dir ${STRATIFIED_OUTPUT_DIR} ${EXTRA}
 
 echo "Done."

@@ -32,7 +32,15 @@ EG_METRICS = ["Degree EG@10", "PageRank EG@10", "Closeness EG@10"]
 # Methods to exclude from plots. Names here must match what appears in
 # table1_precision_equality_gain.csv, which stores already-renamed short names
 # (see METHOD_RENAME in generate_final_tables.py).
-EXCLUDE_METHODS = {"pure_gnn", "node2vec", "deepwalk"}
+EXCLUDE_METHODS = {
+    "pure_gnn",
+    "node2vec",
+    "deepwalk",
+    # These historical ablations are not defined in the paper tables/text.
+    "MB-Pre",
+    "MB-In",
+    "CI-Post",
+}
 
 # Weak-tie diversification rows emitted by generate_final_tables.py
 # (WEAK_TIE_GROUP / WEAK_TIE_CONTROL_GROUP there).  --no_weak_tie drops both.
