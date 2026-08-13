@@ -247,4 +247,3 @@ dependencies:
       - python-louvain==0.16
       - scikit-network==0.31.0
       - seaborn==0.13.2
-prefix: /var/scratch/eerdem/miniconda3/envs/hl_gnn

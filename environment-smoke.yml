@@ -1,0 +1,27 @@
+name: cafe-smoke
+channels:
+  - pyg
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch=2.1.2
+  - cpuonly
+  - pytorch_geometric=2.7
+  - numpy=1.24
+  - scipy=1.8
+  - pandas=2.1
+  - scikit-learn=1.7
+  - networkx=3.2
+  - networkit=11.2
+  - gensim=4.4
+  - matplotlib-base=3.10
+  - tqdm=4.67
+  - pip
+  - pip:
+      # The Conda CPU extension builds require GLIBC 2.29. The official PyG
+      # wheels below also work on the GLIBC 2.28 system used for release tests.
+      - --find-links https://data.pyg.org/whl/torch-2.1.0+cpu.html
+      - torch-scatter==2.1.2
+      - torch-sparse==0.6.18
+      - torch-cluster==1.6.3
