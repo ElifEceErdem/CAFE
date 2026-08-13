@@ -40,6 +40,8 @@ EXCLUDE_METHODS = {
     "MB-Pre",
     "MB-In",
     "CI-Post",
+    "WeakTie",
+    "WeakTie (no re-rank)",
 }
 
 # Weak-tie diversification rows emitted by generate_final_tables.py

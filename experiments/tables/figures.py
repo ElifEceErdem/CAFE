@@ -81,9 +81,8 @@ table1_precision_equality_gain.csv BEFORE the plot script reads it.  Always
 pass --csv/--out_dir pointing at results_repro/tables; the copy in analysis/
 belongs to whichever tree was aggregated last.
 
-CI-Post, MB-In and MB-Pre are intentionally excluded from Figure 3 because
-those historical variants appear in no table and are defined nowhere in the
-paper text.
+CI-Post, MB-In, MB-Pre, WeakTie and WeakTie (no re-rank) are intentionally
+excluded from Figure 3 because they are outside the reported comparison set.
 """,
 )
 
