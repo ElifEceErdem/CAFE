@@ -12,9 +12,13 @@ This script answers it from the artifacts that already back Section 7.2 --
   * per-bin evaluated-user counts |B_g| and issued recommendations K|B_g|,
     read from the per-node stratified files (authoritative: the campaign's
     ``summary_precision_by_bin_*.csv`` misaligns ``n_nodes`` with
-    ``coreness_bin``, so it is deliberately not used);
+    ``coreness_bin``, so it is deliberately not used), together with the
+    bins' mean node degree;
   * whether |B_g| is monotone in coreness (Spearman rho, sign changes);
-  * Spearman rho of EG against coreness rank versus against |Rec(B_g)|;
+  * Spearman rho of EG against coreness rank versus against |Rec(B_g)|,
+    plus the partial Spearman of EG against coreness rank controlling for
+    bin size and for mean bin degree (the degree control answers the
+    objection that the equality gradient is a degree gradient);
   * size-matched bin pairs -- pairs whose perturbations differ by at most
     ``--size_tol`` -- and the EG gap between them.
 
@@ -27,8 +31,12 @@ bound, and the exact deduplicated count can be recovered with ``--npz_dir``
 when a campaign was run with ``--save_recommendations True``.
 
 Outputs (to --out_dir):
-  bin_perturbation_summary.csv   per dataset/bin: size, K|B_g|, coreness range, EG
-  bin_size_monotonicity.csv      per dataset/model: rho(size), rho(EG,.), pairs
+  bin_perturbation_summary.csv   per dataset/bin: size, K|B_g|, coreness range,
+                                 mean degree, EG
+  bin_size_monotonicity.csv      per dataset/model: rho(size), rho(EG,.), the
+                                 partial Spearman of EG with coreness rank
+                                 controlling for bin size and for mean bin
+                                 degree, pairs
   bin_size_matched_pairs.csv     every size-matched bin pair and its EG gap
 """
 
@@ -39,7 +47,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+from scipy.stats import rankdata, spearmanr
 
 STRATIFIED_DIR = 'analysis/plots/stratified_cafe'
 
@@ -50,6 +58,23 @@ METHOD_KEYS = {
     'targets_cafe_in': 'CAFE-In',
     'targets_cafe_pre': 'CAFE-Pre',
 }
+
+
+def partial_spearman(x, y, z):
+    """Partial Spearman of x and y controlling for z (Pearson on ranks)."""
+    rx, ry, rz = rankdata(x), rankdata(y), rankdata(z)
+
+    def pearson(a, b):
+        a = a - a.mean()
+        b = b - b.mean()
+        denom = np.sqrt(np.sum(a * a) * np.sum(b * b))
+        return float(np.sum(a * b) / denom) if denom > 0 else 0.0
+
+    r_xy = pearson(rx, ry)
+    r_xz = pearson(rx, rz)
+    r_yz = pearson(ry, rz)
+    denom = np.sqrt((1.0 - r_xz ** 2) * (1.0 - r_yz ** 2))
+    return float((r_xy - r_xz * r_yz) / denom) if denom > 0 else np.nan
 
 
 def argument():
@@ -77,7 +102,7 @@ def load_bins(stratified_dir):
         raise FileNotFoundError(f"No stratified_cafe_*.csv under {stratified_dir}")
     for path in paths:
         dataset = os.path.basename(path)[len('stratified_cafe_'):-len('.csv')]
-        frame = pd.read_csv(path, usecols=['node_id', 'model', 'run',
+        frame = pd.read_csv(path, usecols=['node_id', 'model', 'run', 'degree',
                                            'coreness_bin', 'coreness_bin_label',
                                            'node_coreness'])
         # One model and one run is enough: the split is fixed, so the binning
@@ -91,7 +116,8 @@ def load_bins(stratified_dir):
         grouped = (first.groupby(['coreness_bin', 'coreness_bin_label'])
                         .agg(n_users=('node_id', 'nunique'),
                              coreness_min=('node_coreness', 'min'),
-                             coreness_max=('node_coreness', 'max'))
+                             coreness_max=('node_coreness', 'max'),
+                             degree_mean=('degree', 'mean'))
                         .reset_index()
                         .sort_values('coreness_bin')
                         .reset_index(drop=True))
@@ -149,6 +175,7 @@ def main():
     for dataset, grouped in bins.items():
         sizes = grouped['n_users'].to_numpy(float)
         rec = sizes * args.k
+        degrees = grouped['degree_mean'].to_numpy(float)
         labels = grouped['coreness_bin_label'].tolist()
         rank = np.arange(len(sizes), dtype=float)
 
@@ -182,6 +209,7 @@ def main():
                 'coreness_max': int(row['coreness_max']),
                 'n_users': int(row['n_users']),
                 'rec_events': int(rec[i]),
+                'degree_mean': float(row['degree_mean']),
             }
             if exact is not None:
                 entry['rec_edges_unique'] = exact.get(int(row['coreness_bin']))
@@ -214,6 +242,10 @@ def main():
                 base, model=model,
                 rho_eg_vs_coreness=rho_rank,
                 rho_eg_vs_size=rho_sz,
+                rho_eg_vs_coreness_partial_size=partial_spearman(
+                    rank, values, sizes),
+                rho_eg_vs_coreness_partial_degree=partial_spearman(
+                    rank, values, degrees),
                 eg_strictly_decreasing=bool(np.all(np.diff(values) < 0)),
                 eg_upward_steps=int(np.sum(np.diff(values) > 0)),
                 eg_min=values.min(), eg_max=values.max(),
@@ -258,6 +290,8 @@ def main():
         print(f"\n=== EG gradient vs size ({args.focus_model}) ===")
         focus = mono[mono['model'] == args.focus_model]
         print(focus[['dataset', 'rho_eg_vs_coreness', 'rho_eg_vs_size',
+                     'rho_eg_vs_coreness_partial_size',
+                     'rho_eg_vs_coreness_partial_degree',
                      'rho_size_vs_coreness', 'eg_strictly_decreasing',
                      'eg_upward_steps', 'eg_span']].round(3).to_string(index=False))
         if len(pairs):

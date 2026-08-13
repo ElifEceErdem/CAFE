@@ -12,8 +12,10 @@
 #   1. hit@10 ~ log degree + coreness
 #   2. add local clustering coefficient
 #   3. add held-out-target opportunity as a sensitivity
-#   4. re-bin the same recommendations by local clustering and recompute
-#      stratified Degree EG and Spearman gradients.
+#   4. re-bin the same recommendations by degree and by local clustering and
+#      recompute stratified Degree EG and Spearman gradients.
+#   5. nest coreness bins inside degree quartiles and recompute EG per cell,
+#      which is the control that actually answers the degree objection.
 #
 # This job trains no models and requests no GPU. It processes one dataset per
 # task and then strictly finalizes only when all five datasets are complete.

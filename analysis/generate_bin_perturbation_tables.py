@@ -99,7 +99,9 @@ def table_bin_perturbation(summary, mono, pairs, focus_model):
         r' $|B_g|$, the recommendations $K|B_g|$ that bin $g$ contributes to'
         r' $\hat{G}_g$, and ' + focus_model + r"'s stratified Degree~EG@10.",
         r'Panel~(b) contrasts the Spearman correlation of EG with coreness'
-        r' rank against its correlation with perturbation size, and reports'
+        r' rank against its correlation with perturbation size, reports the'
+        r' partial Spearman correlations of EG with coreness rank controlling'
+        r' for bin size and for mean bin degree, and reports'
         r' the size-matched bin pair -- the two bins whose perturbations are'
         r' closest -- with the widest EG gap on each dataset.',
         r'Same fixed-split artifacts as Table~\ref{tab:coreness-bins};'
@@ -131,14 +133,15 @@ def table_bin_perturbation(summary, mono, pairs, focus_model):
 
     lines += [
         r'\vspace{8pt}',
-        r'\subcaption*{(b) Coreness versus size, and the widest size-matched'
-        r' pair}',
-        r'\begin{tabular}{lrrrlrrr}',
+        r'\subcaption*{(b) Coreness versus size and degree, and the widest'
+        r' size-matched pair}',
+        r'\begin{tabular}{lrrrrrlrrr}',
         r'\toprule',
-        r' & \multicolumn{3}{c}{Spearman $\rho_S$ with EG$^{(g)}$}'
+        r' & \multicolumn{5}{c}{Spearman $\rho_S$ with EG$^{(g)}$}'
         r' & \multicolumn{4}{c}{Widest size-matched bin pair} \\',
-        r'\cmidrule(lr){2-4}\cmidrule(lr){5-8}',
-        r'Dataset & Coreness rank & $K|B_g|$ & size vs.\ rank'
+        r'\cmidrule(lr){2-6}\cmidrule(lr){7-10}',
+        r'Dataset & Coreness rank & $K|B_g|$ & Partial (size)'
+        r' & Partial (degree) & size vs.\ rank'
         r' & Bins & $K|B_g|$ & EG@10 & Gap \\',
         r'\midrule',
     ]
@@ -150,6 +153,8 @@ def table_bin_perturbation(summary, mono, pairs, focus_model):
         lines.append(
             f"{DATASET_LABEL[dataset]} & {signed(row['rho_eg_vs_coreness'])} & "
             f"{signed(row['rho_eg_vs_size'])} & "
+            f"{signed(row['rho_eg_vs_coreness_partial_size'])} & "
+            f"{signed(row['rho_eg_vs_coreness_partial_degree'])} & "
             f"{signed(row['rho_size_vs_coreness'])} & "
             f"{pair['label_a'].replace('-', '--')} vs.\\ "
             f"{pair['label_b'].replace('-', '--')} & "

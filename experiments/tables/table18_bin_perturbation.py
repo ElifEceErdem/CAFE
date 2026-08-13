@@ -2,8 +2,8 @@
 
 Appendix C.  Panel (a): per source-coreness bin, evaluated users |B_g| and
 CAFE-In's stratified Degree EG@10.  Panel (b): Spearman correlation of EG with
-coreness rank and with |B_g|, the partial correlation controlling for size, and
-the two most size-matched bins per dataset.
+coreness rank and with |B_g|, the partial correlations controlling for size
+and for mean bin degree, and the two most size-matched bins per dataset.
 
 This is the answer to the "your gradient is a perturbation-size gradient"
 objection, so it must be built from the SAME stratified artifacts that back

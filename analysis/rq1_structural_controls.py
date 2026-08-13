@@ -5,11 +5,23 @@ This is a read-only reanalysis of the corrected stratified recommendation
 artifacts.  For one dataset, ``run`` reconstructs the frozen training split,
 verifies every recommendation artifact, computes exact training-graph local
 clustering, fits per-user logistic models with source-user-clustered sandwich
-covariance, and re-bins the same recommendations by clustering coefficient.
+covariance, and re-bins the same recommendations along three alternative
+stratifiers (coreness, degree, local clustering) plus a nested
+degree-band x coreness grid.
+
+The three marginal axes and the nested grid answer different objections.  A
+marginal degree axis does NOT settle the "your equality gradient is a degree
+gradient" objection, because degree and coreness are correlated and the
+degree-ranked profile is expected to decline too.  Nor can a bin-level
+partial correlation settle it: mean bin degree is perfectly rank-correlated
+with coreness-bin rank (rho_S = +1.0 on all five networks), so that partial
+is undefined.  What settles it is the nested grid -- whether the coreness
+gradient survives WITHIN a degree band, which is the Equality-Gain twin of
+the degree x coreness precision heatmap in Figure 1(a).
 
 ``finalize`` requires all five datasets and writes the full coefficient grid,
-the CAFE-In extension to Table 18(b), all-method diagnostics, and integrity
-metadata.  No model is trained by this program.
+the CAFE-In columns to append to Table 18(b), all-method diagnostics, and
+integrity metadata.  No model is trained by this program.
 """
 
 from __future__ import annotations
@@ -56,10 +68,25 @@ NPZ_KEYS = {
     "CAFE-In": "targets_cafe_in",
     "CAFE-Pre": "targets_cafe_pre",
 }
-PROFILE = "rq1_conditional_hit_and_clustering_axis_v1"
-SCHEMA_VERSION = 1
+PROFILE = "rq1_conditional_hit_and_alternative_axes_v2"
+SCHEMA_VERSION = 2
 K = 10
 NUM_BINS = 10
+# Marginal alternative-axis controls for the stratified Degree-EG gradient.
+# "degree" answers the mechanical confound (coreness is bounded by degree),
+# "clustering" the conceptual competitor.  Both re-bin the SAME
+# recommendations, so any difference is the stratifier, not the scorer.
+AXES = ("coreness", "degree", "clustering")
+# The nested control.  A marginal degree axis cannot settle the degree
+# objection on its own, because degree and coreness are correlated: a
+# degree-ranked stratification is expected to show a gradient too.  What
+# settles it is whether the coreness gradient survives WITHIN a degree band.
+# The band/bin counts match Figure 1(a) (--num_degree_bins 4,
+# --num_coreness_bins 5), so the EG panel is that figure's twin.
+NESTED_DEGREE_BANDS = 4
+NESTED_CORENESS_BINS = 5
+# A Spearman correlation over fewer than three bins is not interpretable.
+MIN_BINS_PER_BAND = 3
 KNOWN_NONEDGEWISE_SELECTED_CONFIG_SHA256 = (
     "57b80781dbd15cc367c8c857d92ff535d63084a20ed2110438185f4e49fb13df"
 )
@@ -244,7 +271,19 @@ def test_targets(test_edges: torch.Tensor) -> dict[int, set[int]]:
     return result
 
 
-def quantile_bins(values: pd.Series, requested: int = NUM_BINS) -> pd.Series:
+def quantile_bins(
+    values: pd.Series,
+    requested: int = NUM_BINS,
+    minimum: int = MIN_BINS_PER_BAND,
+) -> pd.Series:
+    """Rank-bin ``values`` into contiguous bins numbered from zero.
+
+    ``minimum`` guards the marginal axes, where too few realized bins make the
+    Spearman gradient meaningless and the whole dataset should fail loudly.
+    Pass ``minimum=0`` for the nested bands, where a thin band is a fact about
+    the network (Brightkite's coreness collapses) and must be recorded rather
+    than abort the four bands that do resolve.
+    """
     try:
         result = pd.qcut(values, q=requested, labels=False, duplicates="drop")
     except ValueError:
@@ -254,9 +293,102 @@ def quantile_bins(values: pd.Series, requested: int = NUM_BINS) -> pd.Series:
     observed = sorted(int(value) for value in result.unique())
     remap = {old: new for new, old in enumerate(observed)}
     normalized = result.astype(int).map(remap).astype(int)
-    if normalized.nunique() < 3:
-        raise StructuralControlError("Alternative axis realizes fewer than three bins")
+    if minimum and normalized.nunique() < minimum:
+        raise StructuralControlError(
+            f"Alternative axis realizes fewer than {minimum} bins"
+        )
     return normalized
+
+
+def nested_degree_coreness(
+    *,
+    sources: Sequence[int],
+    features: pd.DataFrame,
+    coreness: np.ndarray,
+    degrees,
+    recs: Mapping[str, Mapping[int, Sequence[int]]],
+    seed_users: pd.DataFrame,
+    train_edges: torch.Tensor,
+    test_edges: torch.Tensor,
+    num_nodes: int,
+    dataset: str,
+    seed: int,
+) -> pd.DataFrame:
+    """Stratified Degree EG on the degree x coreness grid, for one seed.
+
+    Band users by degree quantile, then re-bin each band by coreness, and
+    evaluate EG on every cell.  Every cell is a distinct source set, so one
+    call per model covers the whole grid: the cell id is the pair (band, bin)
+    flattened, and the caller recovers the two coordinates from the columns.
+
+    A band whose coreness realizes fewer than ``MIN_BINS_PER_BAND`` bins is
+    still emitted -- its rows carry ``resolved = False`` -- because dropping
+    it silently would let a network with collapsed coreness (Brightkite) look
+    like a network where the control simply passed.
+    """
+    band_series = quantile_bins(
+        features.loc[sources, "degree"].reset_index(drop=True),
+        requested=NESTED_DEGREE_BANDS,
+        minimum=MIN_BINS_PER_BAND,
+    )
+    bands = {user: int(value) for user, value in zip(sources, band_series)}
+
+    cell_of_user: dict[int, int] = {}
+    cell_meta: dict[int, dict] = {}
+    for band in sorted(set(bands.values())):
+        members = [user for user in sources if bands[user] == band]
+        band_coreness = pd.Series(
+            [float(coreness[user]) for user in members], index=range(len(members))
+        )
+        # minimum=0: a thin band is data, not a failure -- see the docstring.
+        band_bins = quantile_bins(
+            band_coreness, requested=NESTED_CORENESS_BINS, minimum=0
+        )
+        resolved = bool(band_bins.nunique() >= MIN_BINS_PER_BAND)
+        for user, coreness_bin in zip(members, band_bins):
+            cell = band * NESTED_CORENESS_BINS + int(coreness_bin)
+            cell_of_user[user] = cell
+            cell_meta.setdefault(cell, {
+                "degree_band": band,
+                "coreness_bin": int(coreness_bin),
+                "resolved": resolved,
+                "members": [],
+            })["members"].append(user)
+
+    cell_ids = sorted(cell_meta)
+    eg_results = compute_degree_equality_gain_by_source_bins_for_models(
+        recs, cell_of_user, train_edges, test_edges, num_nodes, K,
+        bin_ids=cell_ids,
+    )
+
+    rows = []
+    for method in METHODS:
+        method_users = seed_users.loc[seed_users["method"] == method]
+        for cell in cell_ids:
+            meta = cell_meta[cell]
+            members = meta["members"]
+            eg_value, gini_control, gini_pred = eg_results[method][cell]
+            precision_values = method_users.loc[
+                method_users["node_id"].isin(members), "precision_at_10"
+            ]
+            rows.append({
+                "dataset": dataset,
+                "training_seed": seed,
+                "method": method,
+                "degree_band": meta["degree_band"],
+                "coreness_bin": meta["coreness_bin"],
+                "resolved": meta["resolved"],
+                "n_sources": len(members),
+                "degree_min": float(min(degrees[user] for user in members)),
+                "degree_max": float(max(degrees[user] for user in members)),
+                "coreness_min": float(min(coreness[user] for user in members)),
+                "coreness_max": float(max(coreness[user] for user in members)),
+                "precision_at_10": float(precision_values.mean()),
+                "degree_eg_at_10": float(eg_value),
+                "gini_control": float(gini_control),
+                "gini_pred": float(gini_pred),
+            })
+    return pd.DataFrame(rows)
 
 
 def edgewise_preflight() -> bool:
@@ -494,6 +626,7 @@ def analyze_dataset(
 
     all_user_frames = []
     axis_frames = []
+    nested_frames = []
     upstream_hashes = {}
     selected_hashes = set()
     lambda_values = set()
@@ -582,14 +715,26 @@ def analyze_dataset(
         clustering_bin_map = {
             user: int(value) for user, value in zip(sources, clustering_bins)
         }
+        degree_bins = quantile_bins(
+            unique_features.loc[sources, "degree"].reset_index(drop=True)
+        )
+        degree_bin_map = {
+            user: int(value) for user, value in zip(sources, degree_bins)
+        }
         axis_maps = {
             "coreness": raw_bin_map,
+            "degree": degree_bin_map,
             "clustering": clustering_bin_map,
         }
         axis_values = {
             "coreness": {user: float(coreness[user]) for user in sources},
+            "degree": {user: float(degrees[user]) for user in sources},
             "clustering": {user: float(clustering[user]) for user in sources},
         }
+        if set(axis_maps) != set(AXES):
+            raise StructuralControlError(
+                f"Axis set drifted from AXES: {sorted(axis_maps)}"
+            )
         for axis, assignments in axis_maps.items():
             bin_ids = sorted(set(assignments.values()))
             eg_results = compute_degree_equality_gain_by_source_bins_for_models(
@@ -627,12 +772,27 @@ def analyze_dataset(
                         "gini_pred": float(gini_pred),
                     }]))
 
+        nested_frames.append(nested_degree_coreness(
+            sources=sources,
+            features=unique_features,
+            coreness=coreness,
+            degrees=degrees,
+            recs=recs,
+            seed_users=seed_users,
+            train_edges=train_edges,
+            test_edges=test_edges,
+            num_nodes=num_nodes,
+            dataset=dataset,
+            seed=seed,
+        ))
+
     per_user = pd.concat(all_user_frames, ignore_index=True)
     per_user, scales = standardize(
         per_user,
         ("log_degree", "coreness", "clustering", "log1p_test_targets"),
     )
     per_bin = pd.concat(axis_frames, ignore_index=True)
+    per_nested = pd.concat(nested_frames, ignore_index=True)
 
     coefficient_frames = []
     diagnostic_rows = []
@@ -720,6 +880,7 @@ def analyze_dataset(
     outputs = {
         "per_user_hits.csv": per_user,
         "axis_bins_per_seed.csv": per_bin,
+        "nested_degree_coreness_per_seed.csv": per_nested,
         "logit_coefficients.csv": coefficients,
         "logit_diagnostics.csv": diagnostics,
         "method_validity.csv": validity,
@@ -737,6 +898,10 @@ def analyze_dataset(
         "methods": list(METHODS),
         "k": K,
         "requested_bins": NUM_BINS,
+        "axes": list(AXES),
+        "nested_degree_bands": NESTED_DEGREE_BANDS,
+        "nested_coreness_bins": NESTED_CORENESS_BINS,
+        "min_bins_per_band": MIN_BINS_PER_BAND,
         "features": {
             "degree": "simple undirected training-graph degree",
             "log_degree": "natural logarithm of positive training degree",
@@ -783,7 +948,7 @@ def aggregate_axis_correlations(per_bin: pd.DataFrame) -> tuple[pd.DataFrame, pd
     aggregate_rows = []
     for dataset in DATASETS:
         for method in METHODS:
-            for axis in ("coreness", "clustering"):
+            for axis in AXES:
                 block = per_bin.loc[
                     (per_bin["dataset"] == dataset)
                     & (per_bin["method"] == method)
@@ -825,6 +990,77 @@ def aggregate_axis_correlations(per_bin: pd.DataFrame) -> tuple[pd.DataFrame, pd
                     "spearman_p_value_on_mean_eg": float(p_value),
                 })
     return pd.DataFrame(per_seed_rows), pd.DataFrame(aggregate_rows)
+
+
+def aggregate_nested_correlations(
+    nested: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Coreness--EG Spearman within each degree band, and its per-cell summary.
+
+    Returns (per_band, summary).  ``per_band`` carries one row per
+    dataset/method/band; ``summary`` reduces each dataset/method to the range
+    of band correlations, which is what Table 18(b) prints.  Bands that did
+    not resolve enough coreness bins are excluded from the summary and
+    counted, so a partial control can never read as a clean one.
+    """
+    band_rows = []
+    summary_rows = []
+    for dataset in DATASETS:
+        for method in METHODS:
+            block = nested.loc[
+                (nested["dataset"] == dataset) & (nested["method"] == method)
+            ]
+            if block.empty:
+                raise StructuralControlError(
+                    f"Nested control missing cells: {dataset}/{method}"
+                )
+            correlations = []
+            for band in sorted(block["degree_band"].unique()):
+                band_block = block.loc[block["degree_band"] == band]
+                # Average the seeds first, exactly as the marginal axes do.
+                averaged = (
+                    band_block.groupby("coreness_bin", as_index=False)
+                    ["degree_eg_at_10"].mean().sort_values("coreness_bin")
+                )
+                resolved = bool(band_block["resolved"].all()
+                                and len(averaged) >= MIN_BINS_PER_BAND)
+                if resolved:
+                    rho, p_value = stats.spearmanr(
+                        averaged["coreness_bin"], averaged["degree_eg_at_10"]
+                    )
+                else:
+                    rho, p_value = np.nan, np.nan
+                band_rows.append({
+                    "dataset": dataset,
+                    "method": method,
+                    "degree_band": int(band),
+                    "resolved": resolved,
+                    "realized_bins": int(len(averaged)),
+                    "n_sources": int(band_block["n_sources"].sum() / len(SEEDS)),
+                    "degree_min": float(band_block["degree_min"].min()),
+                    "degree_max": float(band_block["degree_max"].max()),
+                    "spearman_rho_on_mean_eg": float(rho),
+                    "spearman_p_value_on_mean_eg": float(p_value),
+                    "eg_span": float(averaged["degree_eg_at_10"].max()
+                                     - averaged["degree_eg_at_10"].min()),
+                })
+                if resolved and np.isfinite(rho):
+                    correlations.append(float(rho))
+            if not correlations:
+                raise StructuralControlError(
+                    f"No degree band resolved for {dataset}/{method}"
+                )
+            summary_rows.append({
+                "dataset": dataset,
+                "method": method,
+                "bands_total": int(block["degree_band"].nunique()),
+                "bands_resolved": len(correlations),
+                "rho_min": min(correlations),
+                "rho_max": max(correlations),
+                "rho_mean": float(np.mean(correlations)),
+                "all_negative": bool(all(value < 0 for value in correlations)),
+            })
+    return pd.DataFrame(band_rows), pd.DataFrame(summary_rows)
 
 
 def conditional_table(coefficients: pd.DataFrame, validity: pd.DataFrame) -> str:
@@ -895,38 +1131,76 @@ def conditional_table(coefficients: pd.DataFrame, validity: pd.DataFrame) -> str
     return "\n".join(lines)
 
 
-def table18_extension(axis_summary: pd.DataFrame, validity: pd.DataFrame) -> str:
+def table18_extension(
+    axis_summary: pd.DataFrame,
+    nested_summary: pd.DataFrame,
+    validity: pd.DataFrame,
+) -> str:
+    """Columns to append to Table 18(b) -- no new table in the paper.
+
+    Three marginal stratifiers plus the nested within-degree range.  The
+    marginal degree column is expected to be negative too (degree and coreness
+    are correlated); the column that answers the objection is the last one.
+    """
     lines = [
-        "% Extension to Table 18(b), computed from the same recommendation artifacts.",
+        "% Columns to APPEND to Table 18(b); computed from the same",
+        "% recommendation artifacts as the coreness column.",
         "\\begin{table}[t]", "\\centering", "\\small",
-        "\\caption{Alternative-axis control for CAFE-In stratified Degree EG@10. "
-        "Each entry is Spearman's $\\rho_S$ between bin rank and mean EG across "
-        "the three frozen training seeds.}",
-        "\\label{tab:table18-clustering-axis}",
-        "\\begin{tabular}{lrr}", "\\toprule",
-        "Dataset & Coreness rank & Local-clustering rank \\\\", "\\midrule",
+        "\\caption{Alternative-axis controls for CAFE-In stratified Degree "
+        "EG@10.  The first three columns re-bin the same recommendations by a "
+        "different stratifier; each entry is Spearman's $\\rho_S$ between bin "
+        "rank and mean EG across the three frozen training seeds.  The last "
+        "column stratifies by coreness \\emph{within} each degree quartile and "
+        "reports the range of the four within-band correlations.}",
+        "\\label{tab:table18-alternative-axes}",
+        "\\begin{tabular}{lrrrr}", "\\toprule",
+        " & \\multicolumn{3}{c}{Marginal stratifier}"
+        " & Within degree band \\\\",
+        "\\cmidrule(lr){2-4}\\cmidrule(lr){5-5}",
+        "Dataset & Coreness rank & Degree rank & Local-clustering rank"
+        " & Coreness $\\rho_S$ range \\\\", "\\midrule",
     ]
     display = {
         "ego-facebook": "Ego-FB", "oklahoma": "Oklahoma", "unc": "UNC",
         "pokec_n": "Pokec-n", "brightkite": "Brightkite",
     }
+    partial_bands = False
     for dataset in DATASETS:
         rows = axis_summary.loc[
             (axis_summary["dataset"] == dataset)
             & (axis_summary["method"] == "CAFE-In")
         ].set_index("axis")
+        nested = nested_summary.loc[
+            (nested_summary["dataset"] == dataset)
+            & (nested_summary["method"] == "CAFE-In")
+        ].iloc[0]
         invalid = not bool(validity.loc[
             (validity["dataset"] == dataset) & (validity["method"] == "CAFE-In"),
             "selection_provenance_valid_under_eq8",
         ].iloc[0])
         star = "*" if invalid else ""
+        band_note = ""
+        if int(nested["bands_resolved"]) != int(nested["bands_total"]):
+            partial_bands = True
+            band_note = (f"$^{{\\dagger}}$ ({int(nested['bands_resolved'])}"
+                         f"/{int(nested['bands_total'])})")
         lines.append(
             f"{display[dataset]} & "
             f"{rows.loc['coreness', 'spearman_rho_on_mean_eg']:+.2f}{star} & "
-            f"{rows.loc['clustering', 'spearman_rho_on_mean_eg']:+.2f}{star} \\\\"
+            f"{rows.loc['degree', 'spearman_rho_on_mean_eg']:+.2f}{star} & "
+            f"{rows.loc['clustering', 'spearman_rho_on_mean_eg']:+.2f}{star} & "
+            f"[{nested['rho_min']:+.2f}, {nested['rho_max']:+.2f}]"
+            f"{band_note} \\\\"
+        )
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    if partial_bands:
+        lines.append(
+            "\\par\\footnotesize $^{\\dagger}$Degree bands whose coreness "
+            f"realizes fewer than {MIN_BINS_PER_BAND} bins are excluded; the "
+            "fraction gives resolved bands out of the bands the degree "
+            f"quantiles actually realize (at most {NESTED_DEGREE_BANDS})."
         )
     lines += [
-        "\\bottomrule", "\\end{tabular}",
         "\\par\\footnotesize *Upstream CAFE-In configuration selection predates "
         "the Eq.~(8) shape fix; recompute from the corrected campaign before use.",
         "\\end{table}", "",
@@ -944,6 +1218,7 @@ def finalize(campaign: Path, if_complete: bool, rebuild: bool) -> int:
         frames: dict[str, list[pd.DataFrame]] = {
             "per_user_hits.csv": [],
             "axis_bins_per_seed.csv": [],
+            "nested_degree_coreness_per_seed.csv": [],
             "logit_coefficients.csv": [],
             "logit_diagnostics.csv": [],
             "method_validity.csv": [],
@@ -995,8 +1270,11 @@ def finalize(campaign: Path, if_complete: bool, rebuild: bool) -> int:
         per_seed_axis, aggregate_axis = aggregate_axis_correlations(
             combined["axis_bins_per_seed.csv"]
         )
+        per_band_nested, nested_summary = aggregate_nested_correlations(
+            combined["nested_degree_coreness_per_seed.csv"]
+        )
         table_conditional = conditional_table(coefficients, validity)
-        table_axis = table18_extension(aggregate_axis, validity)
+        table_axis = table18_extension(aggregate_axis, nested_summary, validity)
 
         output_dir.mkdir(parents=True, exist_ok=True)
         outputs = {
@@ -1008,6 +1286,10 @@ def finalize(campaign: Path, if_complete: bool, rebuild: bool) -> int:
             "rq1_method_validity.csv": validity,
             "rq1_axis_correlations_per_seed.csv": per_seed_axis,
             "rq1_axis_correlations_on_mean_eg.csv": aggregate_axis,
+            "rq1_nested_cells_per_seed.csv":
+                combined["nested_degree_coreness_per_seed.csv"],
+            "rq1_nested_within_degree_band.csv": per_band_nested,
+            "rq1_nested_within_degree_summary.csv": nested_summary,
         }
         for name, frame in outputs.items():
             atomic_csv(output_dir / name, frame)
@@ -1015,7 +1297,8 @@ def finalize(campaign: Path, if_complete: bool, rebuild: bool) -> int:
             output_dir / "rq1_conditional_hit_table.tex", table_conditional.encode("utf-8")
         )
         atomic_bytes(
-            output_dir / "table18_clustering_axis_extension.tex", table_axis.encode("utf-8")
+            output_dir / "table18_alternative_axes_extension.tex",
+            table_axis.encode("utf-8"),
         )
 
         exact = {
@@ -1032,12 +1315,53 @@ def finalize(campaign: Path, if_complete: bool, rebuild: bool) -> int:
                 ),
                 "total_cells": int(len(block)),
             }
+        # The degree control's answer, stated as a count rather than left for
+        # the reader to reconstruct from the table.
+        cafe_in_bands = per_band_nested.loc[
+            (per_band_nested["method"] == "CAFE-In") & per_band_nested["resolved"]
+        ]
+        exceptions = cafe_in_bands.loc[cafe_in_bands["spearman_rho_on_mean_eg"] >= 0]
+        exact["within_degree_band_coreness_gradient"] = {
+            "resolved_bands": int(len(cafe_in_bands)),
+            "negative_rho_bands": int((cafe_in_bands["spearman_rho_on_mean_eg"] < 0).sum()),
+            # "all resolved bands", not "all bands": a dataset whose degree
+            # quantiles collapse (Brightkite) can qualify on a subset.
+            "datasets_all_resolved_bands_negative": sorted(
+                nested_summary.loc[
+                    (nested_summary["method"] == "CAFE-In")
+                    & nested_summary["all_negative"], "dataset"
+                ].tolist()
+            ),
+            "datasets_with_unresolved_bands": sorted(
+                nested_summary.loc[
+                    (nested_summary["method"] == "CAFE-In")
+                    & (nested_summary["bands_resolved"]
+                       < nested_summary["bands_total"]), "dataset"
+                ].tolist()
+            ),
+            "non_negative_bands": [
+                {
+                    "dataset": row.dataset,
+                    "degree_band": int(row.degree_band),
+                    "degree_range": [row.degree_min, row.degree_max],
+                    "realized_bins": int(row.realized_bins),
+                    "rho": float(row.spearman_rho_on_mean_eg),
+                    "p_value": float(row.spearman_p_value_on_mean_eg),
+                }
+                for row in exceptions.itertuples(index=False)
+            ],
+            "bands_p_below_0_05": int(
+                (cafe_in_bands["spearman_p_value_on_mean_eg"] < 0.05).sum()
+            ),
+            "degree_bands_requested": NESTED_DEGREE_BANDS,
+            "coreness_bins_per_band_requested": NESTED_CORENESS_BINS,
+        }
         atomic_json(output_dir / "rq1_structural_control_counts.json", exact)
 
         output_names = [
             *outputs,
             "rq1_conditional_hit_table.tex",
-            "table18_clustering_axis_extension.tex",
+            "table18_alternative_axes_extension.tex",
             "rq1_structural_control_counts.json",
         ]
         integrity = {
