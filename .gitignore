@@ -41,7 +41,8 @@ data/SNAP/*
 # version.  The GENERATED TABLES are the artifacts worth tracking, so
 # results_repro/tables/ is explicitly re-included below.
 # ---------------------------------------------------------------------------
-/results/
+/results/*
+!/results/README.md
 /results_repro/*
 /results_egfix/
 /results_penalty_reduction/
@@ -61,6 +62,8 @@ data/SNAP/*
 # ---------------------------------------------------------------------------
 analysis/plots/**/stratified_cafe_*.csv
 analysis/plots/**/exposure_per_node_*.csv
+analysis/plots/**/stratified_cafe_*.csv.gz
+analysis/plots/**/exposure_per_node_*.csv.gz
 analysis/plots/**/*_raw.csv
 analysis/plots/**/*.pdf
 
@@ -116,4 +119,3 @@ audit_p5.md
 baselines/__pycache__/
 backbone/__pycache__/
 core/__pycache__/
-
