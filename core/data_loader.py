@@ -166,6 +166,19 @@ def load_sensitive_attr(data_name, num_nodes, root='./dataset'):
         )
 
 
+def _resolve_csv_or_gzip(root, data_name, csv_file):
+    """Prefer an uncompressed dataset table, with a ``.gz`` fallback."""
+    csv_path = os.path.join(root, data_name, csv_file)
+    if os.path.exists(csv_path):
+        return csv_path
+    gzip_path = f'{csv_path}.gz'
+    if os.path.exists(gzip_path):
+        return gzip_path
+    raise FileNotFoundError(
+        f"Dataset table not found at {csv_path!r} or {gzip_path!r}"
+    )
+
+
 def _load_facebook_style_sens(data_name, num_nodes, root):
     """Load sensitive attributes for oklahoma/unc from pkl files with proper node alignment."""
     import pickle
@@ -206,7 +219,7 @@ def _load_pokec_sens(data_name, num_nodes, root):
         'pokec_z': 'region_job.csv',
     }
     csv_file = csv_map[data_name]
-    csv_path = os.path.join(root, data_name, csv_file)
+    csv_path = _resolve_csv_or_gzip(root, data_name, csv_file)
 
     df = pd.read_csv(csv_path)
     sens = torch.FloatTensor(df['region'].values)
@@ -236,7 +249,7 @@ def load_node_labels(data_name, num_nodes, root='./dataset'):
             'pokec_z': 'region_job.csv',
         }
         csv_file = csv_map[data_name]
-        csv_path = os.path.join(root, data_name, csv_file)
+        csv_path = _resolve_csv_or_gzip(root, data_name, csv_file)
 
         df = pd.read_csv(csv_path)
         labels = df['I_am_working_in_field'].values.copy()

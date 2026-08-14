@@ -13,16 +13,18 @@ Implements the two robustness variants specified in the ToRS paper
   EG-PW   : precision-weighted acceptance — each recommended edge at
             rank r carries weight rho(r), the empirical fraction of
             rank-r recommendations (across users) appearing in E_test.
-            Degree becomes weighted (expected) degree; PageRank runs
-            on the weighted adjacency. Closeness is reported under
-            full and TP only (it requires an unweighted distance
-            structure).
+            Degree becomes weighted (expected) legacy indegree;
+            PageRank runs on the weighted adjacency. Closeness is
+            reported under full and TP only (it requires an unweighted
+            distance structure).
 
 Graph conventions:
-  - full and TP variants use the same simple undirected set-union graph
-    constructor as the main EG pipeline
+  - Degree full and TP use the active legacy directed-indegree implementation
+    from metrics/equality_gain.py; Degree PW applies rho(r) to the same
+    directed recommendation events, preserving duplicates
+  - PageRank and Closeness full/TP use simple undirected set-union graphs
   - reciprocal PW recommendation events with probabilities p_i collapse
-    to one expected edge of weight 1 - prod_i(1 - p_i)
+    to one expected edge of weight 1 - prod_i(1 - p_i) for PageRank only
   - PageRank uses the resulting symmetric weighted adjacency, damping 0.85,
     and power iteration with per-step normalization
   - Gini over the nonzero support (compute_gini_coefficient)
@@ -91,28 +93,61 @@ def filter_recs_tp(recs_by_u: Dict[int, List[int]],
 
 
 # ---------------------------------------------------------------------------
-# Weighted (precision-weighted) centralities
+# Weighted (precision-weighted) variants
 # ---------------------------------------------------------------------------
 
 def weighted_predicted_degree(train_edges: torch.Tensor,
                               recs_by_u: Dict[int, List[int]],
                               num_nodes: int, k: int,
                               rho: np.ndarray,
-                              mode: str = 'undirected') -> torch.Tensor:
+                              mode: str = 'indegree') -> torch.Tensor:
     """
-    Expected degree under independent rank-weighted acceptance.
+    Expected legacy degree under independent rank-weighted acceptance.
 
-    The compatibility ``mode`` argument is ignored: structural EG is
-    evaluated on the paper's simple undirected graph.
+    This is the probability-weighted counterpart of
+    :func:`build_predicted_degree_distribution`: training-edge multiplicity
+    is preserved and every directed recommendation event contributes
+    ``rho[rank]``.  Consequently, all-zero ``rho`` returns the training
+    distribution and all-one ``rho`` exactly returns the full legacy
+    predicted distribution.
     """
-    edges, weights = _build_expected_predicted_graph(
-        train_edges, recs_by_u, num_nodes, k, rho
+    if mode not in {'indegree', 'outdegree', 'total'}:
+        raise ValueError(f"Unsupported legacy degree mode: {mode!r}")
+
+    rho = np.asarray(rho, dtype=np.float64)
+    if len(rho) < k:
+        raise ValueError(f"rho has length {len(rho)} but k={k}")
+    if np.any(~np.isfinite(rho[:k])) or np.any((rho[:k] < 0) | (rho[:k] > 1)):
+        raise ValueError("Acceptance probabilities must be finite and in [0, 1]")
+
+    degrees = build_predicted_degree_distribution(
+        train_edges, {}, num_nodes, k, mode=mode
     )
-    degrees = torch.zeros(num_nodes, dtype=torch.float32)
-    if edges.numel() > 0:
-        weights_f = weights.to(dtype=torch.float32)
-        degrees.scatter_add_(0, edges[:, 0], weights_f)
-        degrees.scatter_add_(0, edges[:, 1], weights_f)
+    rec_src, rec_dst, rec_weights = [], [], []
+    for raw_u, values in recs_by_u.items():
+        u = int(raw_u)
+        if not 0 <= u < num_nodes:
+            raise ValueError(f"Recommendation source outside [0, {num_nodes}): {u}")
+        for rank, raw_v in enumerate(values[:k]):
+            v = int(raw_v)
+            if not 0 <= v < num_nodes:
+                raise ValueError(
+                    f"Recommendation target outside [0, {num_nodes}): {v}"
+                )
+            rec_src.append(u)
+            rec_dst.append(v)
+            rec_weights.append(float(rho[rank]))
+
+    if rec_weights:
+        weights = torch.tensor(rec_weights, dtype=torch.float32)
+        if mode in {'indegree', 'total'}:
+            degrees.scatter_add_(
+                0, torch.tensor(rec_dst, dtype=torch.long), weights
+            )
+        if mode in {'outdegree', 'total'}:
+            degrees.scatter_add_(
+                0, torch.tensor(rec_src, dtype=torch.long), weights
+            )
     return degrees
 
 
@@ -269,7 +304,7 @@ def compute_acceptance_robust_eg(
     cent_kwargs_closeness = {'use_sampling': use_sampling_closeness,
                              'epsilon': 0.1}
 
-    # ---- Degree on the same simple undirected graph as the main pipeline ----
+    # ---- Degree using the certified legacy directed-indegree definition ----
     deg_ctrl = build_control_degree_distribution(
         train_cpu, test_cpu, num_nodes)
     g_ctrl_deg = compute_gini_coefficient(deg_ctrl)
