@@ -1,0 +1,50 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t11
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=64G
+#SBATCH --time=96:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#
+# Table 11: EG under full, precision-weighted (PW) and true-positive (TP)
+# acceptance for RA, HL-GNN, HL-GNN+RA (at CAFE-In's beta), CAFE-In, CAFE-Pre.
+# Each arm writes <OUT>/<ds>/<arm>/acceptance.jsonl (core/acceptance_probe.py)
+# next to its main results; Full and PW/TP come from the same recommendations.
+#
+#   sbatch reproduce/jobs/t11_acceptance.job
+#   sbatch --export=ALL,STAGE=build reproduce/jobs/t11_acceptance.job
+JOB_NAME=t11_acceptance
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+
+if [[ "${STAGE}" == "build" ]]; then
+    build_and_verify T11
+    exit 0
+fi
+
+ARMS=${ARMS:-ra,hl-gnn,fusion,cafe-in,cafe-pre}
+has () { [[ ",${ARMS}," == *",$1,"* ]]; }
+D=${OUT}/${DS}
+probe () { echo "--acceptance_probe_jsonl ${D}/$1/acceptance.jsonl --acceptance_probe_method $2"; }
+
+if has ra; then
+    runner "${D}/ra" run_baselines.py --data_name "${DS}" --data_path "${DATA}" --encoder HLGNN \
+        --methods ra --runs 1 --seed 42 --epochs 300 --batch_size 16384 \
+        --use_equality_gain True --use_centrality_gain True --centrality_types pagerank,closeness \
+        --results_dir "${D}/ra" --acceptance_probe_jsonl "${D}/ra/acceptance.jsonl" ${SPLIT}
+fi
+if has hl-gnn; then
+    runner "${D}/hl-gnn" run_cafe_p.py ${COMMON} --runs 10 --coreness_alpha 1.0 \
+        --use_equality_gain True --use_centrality_gain True --beta_ra 0.0 --lambda_mobility 0.0 \
+        --results_file "${D}/hl-gnn/main_results.json" $(probe hl-gnn HL-GNN) ${SPLIT}
+fi
+cafe () {  # $1 mode, $2 penalty, $3 beta, $4 lambda_mob, $5 boost, $6 arm, $7 label
+    local pen=--lambda_fair
+    [[ "$1" == "preproc" ]] && pen=--preproc_alpha
+    runner "${D}/$6" run_cafe.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --penalization_mode "$1" --use_mobility_boost "$5" ${pen} "$2" --beta_ra "$3" --lambda_mobility "$4" \
+        --results_file "${D}/$6/main_results.json" $(probe "$6" "$7") ${EXTRA}
+}
+has fusion   && cafe inproc  0.0        "${FUSION_BETA_MATCHED}" 0.0         False fusion   Fusion
+has cafe-in  && cafe inproc  "${IN_LF}" "${IN_BETA}"            "${IN_LAM}"  True  cafe-in  CAFE-In
+has cafe-pre && cafe preproc "${PRE_A}" "${PRE_BETA}"           "${PRE_LAM}" True  cafe-pre CAFE-Pre

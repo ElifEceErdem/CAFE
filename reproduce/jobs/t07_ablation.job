@@ -1,0 +1,61 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t07
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=64G
+#SBATCH --time=96:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#
+# Table 7: the ablation arms at their separately selected configurations,
+# 10 fixed-split runs.  HL-GNN, CAFE-In and CAFE-Pre rows are shared with
+# Table 4 (t04_main_results.job); run both jobs with the same OUT to rebuild
+# the full table from fresh runs.
+#
+#   sbatch reproduce/jobs/t07_ablation.job
+#   sbatch --export=ALL,STAGE=build reproduce/jobs/t07_ablation.job
+#
+# ARMS: any of ci-in,ci-pre,mb-post,fusion,cafe-in-b,cafe-pre-b,cafe-p (default: all).
+JOB_NAME=${JOB_NAME:-t07_ablation}
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+
+if [[ "${STAGE}" == "build" ]]; then
+    build_and_verify T07
+    exit 0
+fi
+
+ARMS=${ARMS:-ci-in,ci-pre,mb-post,fusion,cafe-in-b,cafe-pre-b,cafe-p}
+has () { [[ ",${ARMS}," == *",$1,"* ]]; }
+D=${OUT}/${DS}
+
+ci () {  # $1 fairness method, $2 lambda, $3 arm
+    runner "${D}/$3" run_coreness_inverse.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --fairness_method "$1" --lambda_fair "$2" \
+        --use_stratified False --use_pa_aware False --use_ndkl False \
+        --results_file "${D}/$3/main_results.json" ${SPLIT}
+}
+cafe () {  # $1 mode, $2 penalty, $3 beta, $4 lambda_mob, $5 boost, $6 arm
+    local pen=--lambda_fair
+    [[ "$1" == "preproc" ]] && pen=--preproc_alpha
+    runner "${D}/$6" run_cafe.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --penalization_mode "$1" --use_mobility_boost "$5" ${pen} "$2" --beta_ra "$3" --lambda_mobility "$4" \
+        --results_file "${D}/$6/main_results.json" ${EXTRA}
+}
+
+has ci-in  && ci coreness_inverse_inproc  "${CI_IN}"  ci-in
+has ci-pre && ci coreness_inverse_preproc "${CI_PRE}" ci-pre
+if has mb-post; then
+    runner "${D}/mb-post" run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --reranking_approach boost --boosting_mode continuous \
+        --lambda_mobility "${MB_POST}" --lambda_bridge 0.0 \
+        --use_stratified False --use_pa_aware False --use_ndkl False --use_degree_plots False \
+        --results_file "${D}/mb-post/main_results.json" ${SPLIT}
+fi
+has fusion     && cafe inproc  0.0         "${FUSION_BETA}" 0.0 False fusion
+has cafe-in-b  && cafe inproc  "${INB_LF}" "${INB_BETA}"    0.0 False cafe-in-b
+has cafe-pre-b && cafe preproc "${PREB_A}" "${PREB_BETA}"   0.0 False cafe-pre-b
+if has cafe-p; then
+    runner "${D}/cafe-p" run_cafe_p.py ${COMMON} --runs 10 --coreness_alpha 1.0 \
+        --use_equality_gain True --use_centrality_gain True \
+        --beta_ra "${P_BETA}" --lambda_mobility "${P_LAM}" --results_file "${D}/cafe-p/main_results.json" ${SPLIT}
+fi

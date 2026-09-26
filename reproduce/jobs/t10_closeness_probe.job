@@ -1,0 +1,30 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t10
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --array=0-2
+#SBATCH --output=logs/%x_%A_%a.out
+#
+# Table 10: shared-backbone closeness probe (HL-GNN+RA with and without the
+# mobility boost), 10 paired reruns; Ego-FB also sweeps lambda_mob.
+# Array: 0 ego-facebook, 1 oklahoma, 2 unc.
+#
+#   sbatch reproduce/jobs/t10_closeness_probe.job
+#   sbatch --export=ALL,STAGE=build reproduce/jobs/t10_closeness_probe.job
+JOB_NAME=t10_closeness_probe
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+PROBE=${OUT}/analysis/plots/closeness_mechanism_paired
+
+if [[ "${STAGE}" == "build" ]]; then
+    (cd analysis && run_py generate_closeness_stratum_table.py --plots_dir "${OUT}/analysis/plots" \
+        --out_dir "${OUT}/results_repro/tables")
+    build_and_verify T10
+    exit 0
+fi
+
+GRID=""
+[[ "${DS}" == "ego-facebook" ]] && GRID="--lam_grid 0.1,0.3,0.5,1.0"
+(cd analysis && run_py closeness_mechanism.py ${COMMON} --runs 10 --K 10 --beta "${IN_BETA}" --lam "${IN_LAM}" \
+    --vary_split False ${GRID} --save_dir "${PROBE}" ${SPLIT})

@@ -1,0 +1,18 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t02
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x_%j.out
+#
+# Table 2: dataset statistics from the processed graphs (CPU only; needs all
+# five datasets under data/SNAP -- Pokec-n and Brightkite are not distributed).
+#
+#   sbatch reproduce/jobs/t02_datasets.job
+JOB_NAME=t02_datasets
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+
+mkdir -p "${OUT}/results_repro/tables"
+(cd analysis && run_py generate_dataset_table.py --data_path "${DATA}" --clustering global \
+    --out "${OUT}/results_repro/tables/dataset_table.tex")
+build_and_verify T02

@@ -1,0 +1,28 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t13
+#SBATCH --gres=gpu:1
+#SBATCH --constraint=TitanRTX
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=64G
+#SBATCH --time=96:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#
+# Table 13: wall-clock runtime (one-time preprocessing, training, inference),
+# 10 repetitions on one NVIDIA TITAN RTX.  Timings are hardware-dependent:
+# the default TOLERANCE accepts +-15 printed units.
+#
+#   sbatch reproduce/jobs/t13_runtime.job
+#   sbatch --export=ALL,STAGE=build reproduce/jobs/t13_runtime.job
+JOB_NAME=t13_runtime
+TOLERANCE=${TOLERANCE:-15}
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+
+if [[ "${STAGE}" == "build" ]]; then
+    build_and_verify T13
+    exit 0
+fi
+mkdir -p "${OUT}/results/${DS}/runtime"
+(cd experiments && run_py run_runtime_benchmark.py ${COMMON} --runs 10 --rec_k 10 \
+    --cafe_in_lambda "${IN_LF}" --cafe_pre_alpha "${PRE_A}" --cafe_beta "${IN_BETA}" --cafe_lam "${IN_LAM}" \
+    --out_json "${OUT}/results/${DS}/runtime/runtime_${DS}.json" ${SPLIT})

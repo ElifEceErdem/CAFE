@@ -1,0 +1,35 @@
+#!/bin/bash
+#SBATCH --job-name=cafe_t19
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=64G
+#SBATCH --time=48:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#
+# Table 19: per-user top-10 success logits with standardized coreness,
+# controlling for log-degree (and local clustering).  Run stage trains the
+# diagnosis scorers (analysis/run_precision_by_coreness.py, 3 runs); build stage
+# fits the clustered logits (analysis/diagnosis_conditional_logit.py).
+#
+#   sbatch reproduce/jobs/t19_conditional_logit.job
+#   sbatch --export=ALL,STAGE=build reproduce/jobs/t19_conditional_logit.job
+JOB_NAME=t19_conditional_logit
+source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
+CAMPAIGN=${OUT}/results_rq1_controls/diagnosis_conditional_v1
+
+if [[ "${STAGE}" == "build" ]]; then
+    run_py analysis/diagnosis_conditional_logit.py finalize --campaign-dir "${CAMPAIGN}" --if-complete
+    build_and_verify T19
+    exit 0
+fi
+TASK_DIR=${CAMPAIGN}/shards/${DS}
+mkdir -p "${TASK_DIR}"
+export PYTHONHASHSEED=42
+run_py analysis/run_precision_by_coreness.py --data_name "${DS}" --data_path "${DATA}" --encoder HLGNN \
+    --epochs 500 --eval_steps 10 --patience 50 --batch_size 16384 --lr 0.001 --runs 3 --seed 42 \
+    --data_split_seed 42 --K 10 --num_bins 10 --num_degree_bins 4 --num_coreness_bins 5 --mode baseline \
+    --save_dir "${TASK_DIR}" ${SPLIT}
+run_py analysis/diagnosis_conditional_logit.py run --dataset "${DS}" \
+    --input-csv "${TASK_DIR}/precision_by_coreness_${DS}.csv" \
+    --input-metadata "${TASK_DIR}/metadata_precision_by_coreness_${DS}.json" --output-dir "${TASK_DIR}"
