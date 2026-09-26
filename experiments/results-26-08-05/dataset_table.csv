@@ -1,6 +1,0 @@
-dataset,num_nodes,num_edges,avg_degree,transitivity,avg_local_clustering,attribute
-ego-facebook,4039,88234,43.6910,0.5192,0.6055,---
-oklahoma,3076,73230,47.6138,0.2320,0.2776,Gen.
-unc,3985,65287,32.7664,0.1656,0.1988,Gen.
-pokec_n,66569,517047,15.5342,0.0712,0.1140,Reg.
-brightkite,58228,214078,7.3531,0.1106,0.1723,---
