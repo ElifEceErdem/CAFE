@@ -1,152 +1,117 @@
 # CAFE: Coreness-Aware Fair Link Recommendation
 
-This repository accompanies the ToRS submission **Coreness-Aware Fair Link
-Recommendation**. CAFE combines an HL-GNN link predictor with coreness-aware
-pre-processing, in-processing, and ranking interventions.
+Code, recorded results and reproduction pipeline for the ToRS paper
+**Coreness-Aware Fair Link Recommendation**
+([`paper/CAFE_ToRS_EceErdem.pdf`](paper/CAFE_ToRS_EceErdem.pdf)).
+CAFE combines an HL-GNN link predictor with coreness-aware pre-processing,
+in-processing and ranking interventions.
 
-## Release scope
+## Reproduce the paper's tables and figures
 
-This release deliberately preserves the legacy experimental implementation.
-The scientific Python code and the reported values have not been rewritten as
-part of the repository cleanup.
+Every table and figure of the paper is rebuilt from recorded results and every
+printed number is checked against the manuscript:
 
-- The supported public-data subset is **Ego-Facebook, Oklahoma97, and UNC28**.
-- The full paper also evaluates Pokec-n and Brightkite. Those datasets are too
-  large to distribute through GitHub and are not required for the public smoke
-  test.
-- Equality Gain in the certified result files uses the legacy
-  `legacy_indegree_reconstructed` definition.
-- The only currently certified experiment outputs are the eight immutable JSON
-  files under [`results_legacy_eg_check/`](results_legacy_eg_check/).
-- The exact configuration source used for those runs is
-  [`configs/best_configs.csv`](configs/best_configs.csv).
-- The public manuscript is
-  [`paper/CAFE_ToRS_EceErdem.pdf`](paper/CAFE_ToRS_EceErdem.pdf).
+```bash
+conda env create -f environment-smoke.yml        # CPU environment
+conda activate cafe-smoke
+make verify-paper                                # builds build/, compares 1,612 printed values
+```
 
-The repository contains additional historical campaigns and analysis outputs.
-They are retained for provenance, but they are not designated as certified
-release results.
+`make verify-paper` needs no GPU and no raw data: the builders read the
+checksummed result snapshot in [`evidence/`](evidence/).  Output:
+
+```text
+ID      ok  known  fail  missing  verdict
+T04    511      1     0        0  PASS
+T07    438      7     0        0  PASS
+...
+```
+
+*known* cells are documented differences between a printed value and its
+recorded source (see [`reproduce/known_deviations.csv`](reproduce/known_deviations.csv));
+*missing* cells belong to the two results that must be re-run (Table 6(a),
+Table 17).  The artifact map, the verification rules and how to re-run each
+experiment are in [`reproduce/README.md`](reproduce/README.md).
+
+To re-run the experiment behind one table on a Slurm cluster and verify the
+fresh numbers:
+
+```bash
+reproduce/jobs/submit.sh t04_main_results      # run array + build/verify stage
+```
 
 ## Quick start: Oklahoma smoke test
 
-The smoke test uses the included Oklahoma graph, runs Resource Allocation on
-CPU, evaluates the legacy metrics, and writes only to `/tmp`.
+Runs Resource Allocation on the included Oklahoma graph on CPU (about 30 s):
 
 ```bash
-git clone <repository-url>
-cd CAFE
-conda env create -f environment-smoke.yml
-conda run -n cafe-smoke make smoke
+make smoke
 ```
 
-On the audited workstation the experiment itself completed in approximately
-31 seconds, used about 627 MiB of memory, and required no GPU. Expected
-Oklahoma RA values are approximately:
-
-| Metric | Expected smoke value |
+| Metric | Expected value |
 |---|---:|
 | Precision@10 | 0.1974 |
 | Degree EG@10 | 5.26 |
 | PageRank EG@10 | 7.97 |
 | Closeness EG@10 | 12.04 |
 
-Small floating-point differences across platforms are acceptable. A successful
-run creates a timestamped JSON below `/tmp/cafe-oklahoma-smoke/oklahoma/`.
-
-If an existing compatible environment is already active, run:
-
-```bash
-make smoke
-```
-
-## Verify the certified release files
-
-```bash
-make verify-certified
-```
-
-This verifies the paper PDF, the exact `best_configs.csv`, and every certified
-legacy result against checked-in SHA-256 hashes. It does not rerun the
-ten-seed GPU experiments.
-
-## Data
-
-The repository includes the data needed for the three-dataset public subset:
-
-```text
-data/SNAP/
-├── ego-facebook/
-├── oklahoma/
-└── unc/
-```
-
-Oklahoma97 and UNC28 can also be restored with
-[`data/SNAP/download_oklahoma_unc.py`](data/SNAP/download_oklahoma_unc.py).
-See [`data/README.md`](data/README.md) for layout, provenance, and the large
-dataset policy.
-
 ## Repository layout
 
 ```text
 CAFE/
-├── backbone/                 # HL-GNN backbone
-├── baselines/                # comparison methods
-├── core/                     # data loading, training, and evaluation
-├── fairness_methods/         # CAFE interventions
-├── metrics/                  # recommendation and fairness metrics
-├── experiments/              # experiment and artifact entry points
-├── analysis/                 # table/figure analysis code
-├── configs/                  # frozen release configurations and hashes
-├── data/                     # included public reproducibility subset
-├── results/                  # generated local results (normally ignored)
-├── results_legacy_eg_check/  # certified immutable outputs
-├── paper/                    # current public paper only
-├── docs/                     # reproducibility and coverage documentation
-├── scripts/                  # entry-point index; legacy paths are preserved
-├── notebooks/                # exploratory-work policy
-├── src/                      # migration note for the preserved legacy layout
-├── environment-smoke.yml     # minimal CPU smoke environment
-└── environment.yml           # full historical experiment environment
+├── backbone/          HL-GNN backbone
+├── baselines/         comparison methods
+├── core/              data loading, training, evaluation
+├── fairness_methods/  CAFE interventions (coreness penalty, re-weighting, mobility boost)
+├── metrics/           precision, Equality Gain (degree, PageRank, closeness), demographic gaps
+├── experiments/       experiment runners (run_*.py) and run_with.py (evaluation-protocol launcher)
+├── analysis/          analysis runners behind Tables 2, 5, 9, 10, 17-19 and Figures 1, 4
+├── reproduce/         table/figure builders, verification, source indexes, Slurm jobs
+├── evidence/          checksummed snapshot of the result files behind the paper
+├── configs/           published configurations and release checksums
+├── data/              public datasets (Ego-Facebook, Oklahoma97, UNC28)
+├── results_legacy_eg_check/  certified release outputs (hash-locked)
+├── paper/             the manuscript
+├── docs/              reproducibility protocol and audit
+└── tests/             pipeline tests (make test)
 ```
 
-The source packages remain at their historical top-level paths so that the
-certified experiment commands and imports are not changed during cleanup.
+## Data
 
-## Full experiments
+Ego-Facebook, Oklahoma97 and UNC28 are included under `data/SNAP/`.  Pokec-n
+and Brightkite are evaluated in the paper but too large to distribute; the
+jobs expect them under `data/SNAP/pokec_n` and `data/SNAP/brightkite` (see
+[`data/README.md`](data/README.md)).  Tables and figures still rebuild without
+them, from `evidence/`.
 
-The main runners are:
+## Experiments
 
-- [`experiments/run_baselines.py`](experiments/run_baselines.py): heuristic,
-  GNN, tail-node, and attribute-aware baselines.
-- [`experiments/run_cafe.py`](experiments/run_cafe.py): CAFE-In and CAFE-Pre.
-- [`experiments/run_cafe_p.py`](experiments/run_cafe_p.py): post-processing and
-  HL-GNN controls.
-- [`experiments/run_coreness_inverse.py`](experiments/run_coreness_inverse.py)
-  and [`experiments/run_mobility_boost.py`](experiments/run_mobility_boost.py):
-  component ablations.
-- [`experiments/run_exposure_acceptance.py`](experiments/run_exposure_acceptance.py):
-  acceptance-model analysis.
+The runners in `experiments/` train and evaluate one method family each:
+`run_baselines.py` (heuristics, GNN, fairness and tail-node baselines),
+`run_cafe.py` (CAFE-In, CAFE-Pre, fusion control, partial pipelines),
+`run_cafe_p.py` (HL-GNN backbone, CAFE^-P), `run_coreness_inverse.py` and
+`run_mobility_boost.py` (single-component ablations), `run_significance.py`
+(split-resampled protocol), `run_exposure_acceptance.py` (exposure and
+acceptance models), `run_runtime_benchmark.py`, `run_k_sensitivity.py`.
+`experiments/run_with.py` adds the two evaluation options used for the paper
+(exact Closeness on the large graphs, split-seed injection).  The jobs in
+`reproduce/jobs/` contain the exact command lines.
 
-Full CAFE runs use GPU resources and are not part of the under-ten-minute smoke
-path. The table-oriented Slurm entry points are indexed in
-[`experiments/jobs/README.md`](experiments/jobs/README.md).
+Equality Gain follows the paper's released definition (result marker
+`legacy_indegree_reconstructed`); see [`docs/reproducibility.md`](docs/reproducibility.md).
 
-## Paper artifacts and limitations
+## Verification targets
 
-The mapping from paper artifacts to entry points, including currently
-uncertified gaps, is documented in
-[`docs/artifact-coverage.md`](docs/artifact-coverage.md). Reproduction protocol,
-result status, and metric semantics are documented in
-[`docs/reproducibility.md`](docs/reproducibility.md).
-
-In particular, the cleanup does not claim that every historical result tree is
-interchangeable. Tables 4, 7, 8, and 11 remain tied to the legacy implementation
-and should not be regenerated with different metric semantics without an
-explicit new experiment campaign.
+| Target | Checks |
+|---|---|
+| `make verify-paper` | every table rebuilt from `evidence/` and compared with the manuscript |
+| `make verify-evidence` | SHA-256 of every evidence file |
+| `make verify-certified` | manuscript, configuration file and certified outputs |
+| `make verify-data` | processed public datasets |
+| `make test` | pipeline tests |
+| `make check-release` | all of the above except the tests |
 
 ## License and citation
 
-The code is released under the [MIT License](LICENSE). Dataset redistribution
-terms remain those of each original dataset provider.
-
-Citation metadata is available in [`CITATION.cff`](CITATION.cff).
+Code: [MIT License](LICENSE).  Dataset redistribution terms are those of the
+original providers.  Citation metadata: [`CITATION.cff`](CITATION.cff).
