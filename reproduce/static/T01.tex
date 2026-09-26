@@ -1,0 +1,13 @@
+% Table 1 -- positioning of CAFE (hand-authored; transcribed from the manuscript)
+\begin{tabular}{lllcc}
+\toprule
+Method & Bias axis & Stage & Attrs. & Top-$K$ \\
+\midrule
+FairAdj~\cite{fairadj}, FairLP~\cite{fairlp} & demographic (dyadic) & pre & yes & no \\
+FairWalk~\cite{fairwalk}, CrossWalk~\cite{crosswalk}, DeBayes~\cite{debayes} & demographic & embedding & yes & no \\
+Cross-LinkBias~\cite{crosslinkbias} & community cross-links & data/pre & no & no \\
+Tail-GNN~\cite{tailgnn}, LTLP~\cite{ltlp}, Tail-STEAK~\cite{tailsteak} & tail accuracy & in & no & partial \\
+SSNet~\cite{ssnet} & degree (normalization) & in & no & yes \\
+CAFE (this work) & coreness (structural) & pre/in+post & no & yes \\
+\bottomrule
+\end{tabular}

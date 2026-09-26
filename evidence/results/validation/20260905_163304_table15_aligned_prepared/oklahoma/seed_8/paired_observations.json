@@ -1,0 +1,132 @@
+{
+  "task": {
+    "index": 18,
+    "dataset": "oklahoma",
+    "seed": 8,
+    "split_seed": 8
+  },
+  "methods": [
+    {
+      "method": "RA",
+      "config": "resource_allocation",
+      "metrics": {
+        "Precision@10": 0.19246894409938198,
+        "Equality_Gain@10": 4.906454749379456,
+        "Pagerank_EG@10": 7.780733989819866,
+        "Closeness_EG@10": 12.213033154316522
+      },
+      "split_evidence": {
+        "dataset": "oklahoma",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3076,
+        "splits": {
+          "train/edge": "991ee59e3df515c4a893f5650b5f18f450def40ffb8716c5bbb020e8d8b7a6bd",
+          "valid/edge": "9feb33720455687bd30ce5c69795e0dbf7d3d435e561f1bf1ec5b4854c3dae13",
+          "valid/edge_neg": "263ba3d0100d763cb15ec6cc9957fcd43978046c6c9a46169c320f8215cf1d02",
+          "test/edge": "81e87c4e5fc1c27c756e8e6dd4d4967b6fa4ecb216a44ef5ea9579e99165849a",
+          "test/edge_neg": "75a1c2e9d59f960f87bdc2e68410ffd747432d397db17c99f2f0ce80ee7ddcf5"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "HL-GNN",
+      "config": "beta_0.0_lambda_0.0",
+      "metrics": {
+        "Precision@10": 0.14580745341615123,
+        "Equality_Gain@10": 3.4489922914682123,
+        "Pagerank_EG@10": 7.033763684991056,
+        "Closeness_EG@10": 12.156645692167904
+      },
+      "split_evidence": {
+        "dataset": "oklahoma",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3076,
+        "splits": {
+          "train/edge": "991ee59e3df515c4a893f5650b5f18f450def40ffb8716c5bbb020e8d8b7a6bd",
+          "valid/edge": "9feb33720455687bd30ce5c69795e0dbf7d3d435e561f1bf1ec5b4854c3dae13",
+          "valid/edge_neg": "263ba3d0100d763cb15ec6cc9957fcd43978046c6c9a46169c320f8215cf1d02",
+          "test/edge": "81e87c4e5fc1c27c756e8e6dd4d4967b6fa4ecb216a44ef5ea9579e99165849a",
+          "test/edge_neg": "75a1c2e9d59f960f87bdc2e68410ffd747432d397db17c99f2f0ce80ee7ddcf5"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "Fusion",
+      "config": "lambda_fair_0.0_beta_5.0_lam_0.0",
+      "metrics": {
+        "Precision@10": 0.19627329192546877,
+        "Equality_Gain@10": 4.297184961389055,
+        "Pagerank_EG@10": 7.781811265472416,
+        "Closeness_EG@10": 11.642546937603543
+      },
+      "split_evidence": {
+        "dataset": "oklahoma",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3076,
+        "splits": {
+          "train/edge": "991ee59e3df515c4a893f5650b5f18f450def40ffb8716c5bbb020e8d8b7a6bd",
+          "valid/edge": "9feb33720455687bd30ce5c69795e0dbf7d3d435e561f1bf1ec5b4854c3dae13",
+          "valid/edge_neg": "263ba3d0100d763cb15ec6cc9957fcd43978046c6c9a46169c320f8215cf1d02",
+          "test/edge": "81e87c4e5fc1c27c756e8e6dd4d4967b6fa4ecb216a44ef5ea9579e99165849a",
+          "test/edge_neg": "75a1c2e9d59f960f87bdc2e68410ffd747432d397db17c99f2f0ce80ee7ddcf5"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-In",
+      "config": "lambda_fair_0.3_beta_5.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.19611801242236335,
+        "Equality_Gain@10": 5.596111578781514,
+        "Pagerank_EG@10": 8.98517090037234,
+        "Closeness_EG@10": 12.197543131213719
+      },
+      "split_evidence": {
+        "dataset": "oklahoma",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3076,
+        "splits": {
+          "train/edge": "991ee59e3df515c4a893f5650b5f18f450def40ffb8716c5bbb020e8d8b7a6bd",
+          "valid/edge": "9feb33720455687bd30ce5c69795e0dbf7d3d435e561f1bf1ec5b4854c3dae13",
+          "valid/edge_neg": "263ba3d0100d763cb15ec6cc9957fcd43978046c6c9a46169c320f8215cf1d02",
+          "test/edge": "81e87c4e5fc1c27c756e8e6dd4d4967b6fa4ecb216a44ef5ea9579e99165849a",
+          "test/edge_neg": "75a1c2e9d59f960f87bdc2e68410ffd747432d397db17c99f2f0ce80ee7ddcf5"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-Pre",
+      "config": "preproc_alpha_1.0_beta_0.5_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.1857919254658409,
+        "Equality_Gain@10": 7.0781820566057805,
+        "Pagerank_EG@10": 11.803812054977106,
+        "Closeness_EG@10": 14.240809410377938
+      },
+      "split_evidence": {
+        "dataset": "oklahoma",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3076,
+        "splits": {
+          "train/edge": "991ee59e3df515c4a893f5650b5f18f450def40ffb8716c5bbb020e8d8b7a6bd",
+          "valid/edge": "9feb33720455687bd30ce5c69795e0dbf7d3d435e561f1bf1ec5b4854c3dae13",
+          "valid/edge_neg": "263ba3d0100d763cb15ec6cc9957fcd43978046c6c9a46169c320f8215cf1d02",
+          "test/edge": "81e87c4e5fc1c27c756e8e6dd4d4967b6fa4ecb216a44ef5ea9579e99165849a",
+          "test/edge_neg": "75a1c2e9d59f960f87bdc2e68410ffd747432d397db17c99f2f0ce80ee7ddcf5"
+        },
+        "temporal": false
+      }
+    }
+  ],
+  "pairing_verified": true,
+  "protocol": "table4_paths_table15_split_resampled"
+}

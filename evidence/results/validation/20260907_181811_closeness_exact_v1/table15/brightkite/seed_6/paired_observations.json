@@ -1,0 +1,132 @@
+{
+  "task": {
+    "index": 6,
+    "dataset": "brightkite",
+    "seed": 6,
+    "split_seed": 42
+  },
+  "methods": [
+    {
+      "method": "RA",
+      "config": "resource_allocation",
+      "metrics": {
+        "Precision@10": 0.02217325227963496,
+        "Equality_Gain@10": -4.413511382961629,
+        "Pagerank_EG@10": 0.7942379184434399,
+        "Closeness_EG@10": 11.066442039186725
+      },
+      "split_evidence": {
+        "dataset": "brightkite",
+        "training_seed": 6,
+        "split_seed": 42,
+        "num_nodes": 58228,
+        "splits": {
+          "train/edge": "50289b78853811dfee3f954fda9370c7201487931159a93bb9a434640fceee23",
+          "valid/edge": "2aa79bb04ac06c3f036a26222aefdedc0fc075c80fd638310a68fb3ae41232a2",
+          "valid/edge_neg": "0fa1cc699256f63f306bcfb0526f2925c7789e721bb03a44f1d18f87c3a66e37",
+          "test/edge": "0b08dac6fef7ab7029e04694cac2e66e00570a448ab3dc487fbedacbe607e558",
+          "test/edge_neg": "2f0e1dbde05552a6ec425b8e9a2cb6072498f7486299154ddf49f0dd3386b853"
+        },
+        "temporal": true
+      }
+    },
+    {
+      "method": "HL-GNN",
+      "config": "beta_0.0_lambda_0.0",
+      "metrics": {
+        "Precision@10": 0.018951367781154818,
+        "Equality_Gain@10": -9.741714448397348,
+        "Pagerank_EG@10": -1.599151691197594,
+        "Closeness_EG@10": 5.846968682929081
+      },
+      "split_evidence": {
+        "dataset": "brightkite",
+        "training_seed": 6,
+        "split_seed": 42,
+        "num_nodes": 58228,
+        "splits": {
+          "train/edge": "50289b78853811dfee3f954fda9370c7201487931159a93bb9a434640fceee23",
+          "valid/edge": "2aa79bb04ac06c3f036a26222aefdedc0fc075c80fd638310a68fb3ae41232a2",
+          "valid/edge_neg": "0fa1cc699256f63f306bcfb0526f2925c7789e721bb03a44f1d18f87c3a66e37",
+          "test/edge": "0b08dac6fef7ab7029e04694cac2e66e00570a448ab3dc487fbedacbe607e558",
+          "test/edge_neg": "2f0e1dbde05552a6ec425b8e9a2cb6072498f7486299154ddf49f0dd3386b853"
+        },
+        "temporal": true
+      }
+    },
+    {
+      "method": "Fusion",
+      "config": "lambda_fair_0.0_beta_5.0_lam_0.0",
+      "metrics": {
+        "Precision@10": 0.021398176291793056,
+        "Equality_Gain@10": -6.0048829567769895,
+        "Pagerank_EG@10": -0.36245252897523167,
+        "Closeness_EG@10": 7.4662481825944464
+      },
+      "split_evidence": {
+        "dataset": "brightkite",
+        "training_seed": 6,
+        "split_seed": 42,
+        "num_nodes": 58228,
+        "splits": {
+          "train/edge": "50289b78853811dfee3f954fda9370c7201487931159a93bb9a434640fceee23",
+          "valid/edge": "2aa79bb04ac06c3f036a26222aefdedc0fc075c80fd638310a68fb3ae41232a2",
+          "valid/edge_neg": "0fa1cc699256f63f306bcfb0526f2925c7789e721bb03a44f1d18f87c3a66e37",
+          "test/edge": "0b08dac6fef7ab7029e04694cac2e66e00570a448ab3dc487fbedacbe607e558",
+          "test/edge_neg": "2f0e1dbde05552a6ec425b8e9a2cb6072498f7486299154ddf49f0dd3386b853"
+        },
+        "temporal": true
+      }
+    },
+    {
+      "method": "CAFE-In",
+      "config": "lambda_fair_0.05_beta_5.0_lam_0.1",
+      "metrics": {
+        "Precision@10": 0.021960486322188152,
+        "Equality_Gain@10": -4.347794204076967,
+        "Pagerank_EG@10": 0.2847485532804339,
+        "Closeness_EG@10": 9.150608109667443
+      },
+      "split_evidence": {
+        "dataset": "brightkite",
+        "training_seed": 6,
+        "split_seed": 42,
+        "num_nodes": 58228,
+        "splits": {
+          "train/edge": "50289b78853811dfee3f954fda9370c7201487931159a93bb9a434640fceee23",
+          "valid/edge": "2aa79bb04ac06c3f036a26222aefdedc0fc075c80fd638310a68fb3ae41232a2",
+          "valid/edge_neg": "0fa1cc699256f63f306bcfb0526f2925c7789e721bb03a44f1d18f87c3a66e37",
+          "test/edge": "0b08dac6fef7ab7029e04694cac2e66e00570a448ab3dc487fbedacbe607e558",
+          "test/edge_neg": "2f0e1dbde05552a6ec425b8e9a2cb6072498f7486299154ddf49f0dd3386b853"
+        },
+        "temporal": true
+      }
+    },
+    {
+      "method": "CAFE-Pre",
+      "config": "preproc_alpha_0.3_beta_2.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.02107902735562285,
+        "Equality_Gain@10": -5.967473555144089,
+        "Pagerank_EG@10": -0.08679191611309543,
+        "Closeness_EG@10": 7.2668528305370295
+      },
+      "split_evidence": {
+        "dataset": "brightkite",
+        "training_seed": 6,
+        "split_seed": 42,
+        "num_nodes": 58228,
+        "splits": {
+          "train/edge": "50289b78853811dfee3f954fda9370c7201487931159a93bb9a434640fceee23",
+          "valid/edge": "2aa79bb04ac06c3f036a26222aefdedc0fc075c80fd638310a68fb3ae41232a2",
+          "valid/edge_neg": "0fa1cc699256f63f306bcfb0526f2925c7789e721bb03a44f1d18f87c3a66e37",
+          "test/edge": "0b08dac6fef7ab7029e04694cac2e66e00570a448ab3dc487fbedacbe607e558",
+          "test/edge_neg": "2f0e1dbde05552a6ec425b8e9a2cb6072498f7486299154ddf49f0dd3386b853"
+        },
+        "temporal": true
+      }
+    }
+  ],
+  "pairing_verified": true,
+  "protocol": "table4_paths_table15_split_resampled_exact_closeness_v1"
+}

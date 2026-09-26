@@ -1,0 +1,132 @@
+{
+  "task": {
+    "index": 5,
+    "dataset": "ego-facebook",
+    "seed": 5,
+    "split_seed": 5
+  },
+  "methods": [
+    {
+      "method": "RA",
+      "config": "resource_allocation",
+      "metrics": {
+        "Precision@10": 0.23765451664025758,
+        "Equality_Gain@10": 8.795308430209628,
+        "Pagerank_EG@10": 5.435168661005311,
+        "Closeness_EG@10": 17.39353451661038
+      },
+      "split_evidence": {
+        "dataset": "ego-facebook",
+        "training_seed": 5,
+        "split_seed": 5,
+        "num_nodes": 4039,
+        "splits": {
+          "train/edge": "5a08e0b6ca7ef34412d2072f4bc1a2e026a6712d5858ca0f73e99f65c8b2319e",
+          "valid/edge": "a89250e704b1095a91d567a6d3048755258909a20c0de9271542aea22005be5d",
+          "valid/edge_neg": "a6d1b843263d0008d7e3675e48a5e74384208d1085e0bf6595705ed01a891ac7",
+          "test/edge": "d0a70d04a92cad2c4d4aa8982820dca75b96d540992a3c9006755cbadb2241a4",
+          "test/edge_neg": "32af3253313b9f92c1f3b72f3bad4833a9453d3c7a444646ca3a36d54725cd11"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "HL-GNN",
+      "config": "beta_0.0_lambda_0.0",
+      "metrics": {
+        "Precision@10": 0.19340729001585086,
+        "Equality_Gain@10": 12.890115296154539,
+        "Pagerank_EG@10": 10.606111027299187,
+        "Closeness_EG@10": 35.298208068274036
+      },
+      "split_evidence": {
+        "dataset": "ego-facebook",
+        "training_seed": 5,
+        "split_seed": 5,
+        "num_nodes": 4039,
+        "splits": {
+          "train/edge": "5a08e0b6ca7ef34412d2072f4bc1a2e026a6712d5858ca0f73e99f65c8b2319e",
+          "valid/edge": "a89250e704b1095a91d567a6d3048755258909a20c0de9271542aea22005be5d",
+          "valid/edge_neg": "a6d1b843263d0008d7e3675e48a5e74384208d1085e0bf6595705ed01a891ac7",
+          "test/edge": "d0a70d04a92cad2c4d4aa8982820dca75b96d540992a3c9006755cbadb2241a4",
+          "test/edge_neg": "32af3253313b9f92c1f3b72f3bad4833a9453d3c7a444646ca3a36d54725cd11"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "Fusion",
+      "config": "lambda_fair_0.0_beta_1.0_lam_0.0",
+      "metrics": {
+        "Precision@10": 0.2357210776545208,
+        "Equality_Gain@10": 10.589370627068734,
+        "Pagerank_EG@10": 8.538978933391887,
+        "Closeness_EG@10": 33.39755294641221
+      },
+      "split_evidence": {
+        "dataset": "ego-facebook",
+        "training_seed": 5,
+        "split_seed": 5,
+        "num_nodes": 4039,
+        "splits": {
+          "train/edge": "5a08e0b6ca7ef34412d2072f4bc1a2e026a6712d5858ca0f73e99f65c8b2319e",
+          "valid/edge": "a89250e704b1095a91d567a6d3048755258909a20c0de9271542aea22005be5d",
+          "valid/edge_neg": "a6d1b843263d0008d7e3675e48a5e74384208d1085e0bf6595705ed01a891ac7",
+          "test/edge": "d0a70d04a92cad2c4d4aa8982820dca75b96d540992a3c9006755cbadb2241a4",
+          "test/edge_neg": "32af3253313b9f92c1f3b72f3bad4833a9453d3c7a444646ca3a36d54725cd11"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-In",
+      "config": "lambda_fair_0.3_beta_1.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.23854199683043162,
+        "Equality_Gain@10": 11.44761374112267,
+        "Pagerank_EG@10": 12.2111726653229,
+        "Closeness_EG@10": 22.265962459750256
+      },
+      "split_evidence": {
+        "dataset": "ego-facebook",
+        "training_seed": 5,
+        "split_seed": 5,
+        "num_nodes": 4039,
+        "splits": {
+          "train/edge": "5a08e0b6ca7ef34412d2072f4bc1a2e026a6712d5858ca0f73e99f65c8b2319e",
+          "valid/edge": "a89250e704b1095a91d567a6d3048755258909a20c0de9271542aea22005be5d",
+          "valid/edge_neg": "a6d1b843263d0008d7e3675e48a5e74384208d1085e0bf6595705ed01a891ac7",
+          "test/edge": "d0a70d04a92cad2c4d4aa8982820dca75b96d540992a3c9006755cbadb2241a4",
+          "test/edge_neg": "32af3253313b9f92c1f3b72f3bad4833a9453d3c7a444646ca3a36d54725cd11"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-Pre",
+      "config": "preproc_alpha_0.05_beta_0.5_lam_0.3",
+      "metrics": {
+        "Precision@10": 0.23372424722662866,
+        "Equality_Gain@10": 12.264529838447293,
+        "Pagerank_EG@10": 13.353151104658275,
+        "Closeness_EG@10": 26.737283698526138
+      },
+      "split_evidence": {
+        "dataset": "ego-facebook",
+        "training_seed": 5,
+        "split_seed": 5,
+        "num_nodes": 4039,
+        "splits": {
+          "train/edge": "5a08e0b6ca7ef34412d2072f4bc1a2e026a6712d5858ca0f73e99f65c8b2319e",
+          "valid/edge": "a89250e704b1095a91d567a6d3048755258909a20c0de9271542aea22005be5d",
+          "valid/edge_neg": "a6d1b843263d0008d7e3675e48a5e74384208d1085e0bf6595705ed01a891ac7",
+          "test/edge": "d0a70d04a92cad2c4d4aa8982820dca75b96d540992a3c9006755cbadb2241a4",
+          "test/edge_neg": "32af3253313b9f92c1f3b72f3bad4833a9453d3c7a444646ca3a36d54725cd11"
+        },
+        "temporal": false
+      }
+    }
+  ],
+  "pairing_verified": true,
+  "protocol": "table4_paths_table15_split_resampled"
+}

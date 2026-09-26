@@ -1,0 +1,61 @@
+artifact,panel,dataset,row,column,field,printed,reproduced,reason,acknowledged
+T04,,ego-facebook,CAFE-In,deg_eg,mean,11.64,11.76,"Printed value is the Degree EG of the Sep-7 aligned acceptance rerun; the Table 4 run (and certified file results_legacy_eg_check/ego-facebook/cafe_in) gives 11.76",2026-09-26
+T07,,ego-facebook,CAFE-In,deg_eg,mean,11.64,11.76,"Same cell as Table 4",2026-09-26
+T07,,pokec_n,HL-GNN+RA,deg_eg,mean,-5.70,0.06,"Printed EG cells come from the beta=1 fusion run (Table 11 control); precision and DeltaPrec from the Table 7 beta=5 run",2026-09-26
+T07,,pokec_n,HL-GNN+RA,deg_eg,sd,0.07,0.06,"see above",2026-09-26
+T07,,pokec_n,HL-GNN+RA,pr_eg,mean,-0.04,2.85,"see above",2026-09-26
+T07,,pokec_n,HL-GNN+RA,pr_eg,sd,0.07,0.03,"see above",2026-09-26
+T07,,pokec_n,HL-GNN+RA,cl_eg,mean,8.66,12.60,"see above",2026-09-26
+T07,,pokec_n,HL-GNN+RA,cl_eg,sd,0.12,0.06,"see above",2026-09-26
+T11,,brightkite,HL-GNN+RA,cl_tp,sd,0.07,0.0797,TP column printed truncated rather than rounded,2026-09-26
+T11,,brightkite,CAFE-Pre,cl_tp,sd,0.11,0.1181,TP column printed truncated rather than rounded,2026-09-26
+T11,,ego-facebook,CAFE-In,pr_full,mean,12.65,12.4974,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,ego-facebook,CAFE-In,pr_full,sd,0.21,0.2310,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,ego-facebook,CAFE-In,cl_full,mean,22.61,24.4875,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,ego-facebook,CAFE-In,cl_full,sd,2.65,5.7653,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,pokec_n,HL-GNN,cl_tp,mean,-0.62,-0.6280,TP column printed truncated rather than rounded,2026-09-26
+T11,,pokec_n,HL-GNN,cl_tp,sd,0.008,0.0090,TP column printed truncated rather than rounded,2026-09-26
+T11,,pokec_n,HL-GNN+RA,cl_tp,sd,0.006,0.0069,TP column printed truncated rather than rounded,2026-09-26
+T11,,pokec_n,CAFE-In,cl_tp,mean,-0.61,-0.6194,TP column printed truncated rather than rounded,2026-09-26
+T11,,pokec_n,CAFE-Pre,cl_tp,sd,0.006,0.0067,TP column printed truncated rather than rounded,2026-09-26
+T11,,unc,CAFE-Pre,deg_full,mean,2.21,1.8664,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,unc,CAFE-Pre,deg_full,sd,0.49,0.4287,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,unc,CAFE-Pre,pr_full,mean,10.73,10.3358,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,unc,CAFE-Pre,pr_full,sd,0.39,0.2352,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T11,,unc,CAFE-Pre,cl_full,mean,15.07,14.5096,Full columns printed from the Table 4 run; PW/TP (and this reproduction) use the acceptance rerun's own Full values,2026-09-26
+T02,,unc,unc,avg_degree,mean,32.76,32.77,"Printed truncated; 2*65287/3985 = 32.766",2026-09-26
+T02,,unc,unc,avg_clustering,mean,0.16,0.17,"Printed truncated; transitivity = 0.1656",2026-09-26
+T06,b,brightkite,brightkite,abs_periphery,mean,2.39e-4,1.005e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,brightkite,brightkite,abs_middle,mean,2.99e-4,7.99e-06,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,brightkite,brightkite,abs_core,mean,-1.98e-4,-2.44e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,ego-facebook,ego-facebook,abs_periphery,mean,2.96e-4,0.0001286,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,ego-facebook,ego-facebook,abs_middle,mean,-1.08e-4,-7.41e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,ego-facebook,ego-facebook,abs_core,mean,-0.44e-5,-5.457e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,oklahoma,oklahoma,abs_periphery,mean,1.96e-4,0.0001878,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,oklahoma,oklahoma,abs_middle,mean,-0.84e-5,-5.199e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,oklahoma,oklahoma,abs_core,mean,-1.58e-4,-0.0001456,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,pokec_n,pokec_n,rel_periphery,mean,+99.2,102.5,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,pokec_n,pokec_n,abs_periphery,mean,1.33e-5,1.739e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,pokec_n,pokec_n,abs_middle,mean,4.03e-5,4.433e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,pokec_n,pokec_n,abs_core,mean,-5.52e-5,-6.992e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,unc,unc,abs_middle,mean,-0.95e-5,-1.267e-05,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T06,b,unc,unc,abs_core,mean,-2.04e-4,-0.0002189,Absolute exposure changes (and the Pokec-n peripheral percentage) do not reproduce from the recorded per-node exposure runs; the relative changes of the other 14 cells do. Source of the printed values not found,2026-09-26
+T08,,oklahoma,HL-GNN,prec,mean,0.1466,0.1454,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,oklahoma,FairAdj,prec,mean,0.0314,0.02959,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,oklahoma,LBA,prec,mean,0.0074,0.006977,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,oklahoma,CAFE-Pre,prec,mean,0.1874,0.1866,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,oklahoma,CAFE-Pre,prec,sd,0.0010,0.001101,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,unc,HL-GNN,prec,mean,0.0803,0.0796,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,unc,FairAdj,prec,mean,0.0180,0.01714,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,unc,MORAL,prec,mean,0.0314,0.03859,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,unc,CAFE-In,prec,mean,0.1202,0.1198,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T08,,unc,CAFE-In,prec,sd,0.0003,0.0003541,Printed precision mean taken from the Table 4 run while SD/DeltaSP/DeltaEO in the row come from the July demographic run (author-accepted hybrid),2026-09-26
+T13,,pokec_n,pokec_n,coreness_s,mean,79.7,80.07,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_vanilla_s,mean,8540,8797,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_vanilla_s,sd,16,350.5,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_cafe_in_s,mean,8675,8949,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_cafe_in_s,sd,11,335.8,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_cafe_pre_s,mean,8532,8802,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,train_cafe_pre_s,sd,9,336.3,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,infer_vanilla_s,mean,57.15,60.31,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26
+T13,,pokec_n,pokec_n,infer_hybrid_s,mean,60.23,63.52,Printed Pokec-n timings come from a benchmark run no longer on disk; results/pokec_n/runtime holds a later measurement,2026-09-26

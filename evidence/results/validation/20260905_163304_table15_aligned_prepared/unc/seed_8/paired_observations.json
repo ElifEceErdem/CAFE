@@ -1,0 +1,132 @@
+{
+  "task": {
+    "index": 28,
+    "dataset": "unc",
+    "seed": 8,
+    "split_seed": 8
+  },
+  "methods": [
+    {
+      "method": "RA",
+      "config": "resource_allocation",
+      "metrics": {
+        "Precision@10": 0.1191709844559604,
+        "Equality_Gain@10": 0.571656278203691,
+        "Pagerank_EG@10": 6.737058851390372,
+        "Closeness_EG@10": 13.267034755845492
+      },
+      "split_evidence": {
+        "dataset": "unc",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3985,
+        "splits": {
+          "train/edge": "a5798112264dfc245d4aa90a3a7966d54e6322830f4684a783e9e4c4af4c0f6d",
+          "valid/edge": "85793e957aa6911677424f05d5a063d54039461ee40bf12aae3246f53d0483ea",
+          "valid/edge_neg": "698c9f38bd4529a5bef352b41b9fa5071a26ad1cbf059d410c875d45bf6be44d",
+          "test/edge": "6d50c7669f8b48e1877ce40ee8fb11d0e88b81b545865af3acbe2608210f9cb4",
+          "test/edge_neg": "771691971d2412cc3d83e1d4286d898a43a94debe1178e2d63711be1deddddcf"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "HL-GNN",
+      "config": "beta_0.0_lambda_0.0",
+      "metrics": {
+        "Precision@10": 0.07829929899420748,
+        "Equality_Gain@10": -5.056399579751704,
+        "Pagerank_EG@10": 4.299371730858211,
+        "Closeness_EG@10": 12.649518339648749
+      },
+      "split_evidence": {
+        "dataset": "unc",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3985,
+        "splits": {
+          "train/edge": "a5798112264dfc245d4aa90a3a7966d54e6322830f4684a783e9e4c4af4c0f6d",
+          "valid/edge": "85793e957aa6911677424f05d5a063d54039461ee40bf12aae3246f53d0483ea",
+          "valid/edge_neg": "698c9f38bd4529a5bef352b41b9fa5071a26ad1cbf059d410c875d45bf6be44d",
+          "test/edge": "6d50c7669f8b48e1877ce40ee8fb11d0e88b81b545865af3acbe2608210f9cb4",
+          "test/edge_neg": "771691971d2412cc3d83e1d4286d898a43a94debe1178e2d63711be1deddddcf"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "Fusion",
+      "config": "lambda_fair_0.0_beta_5.0_lam_0.0",
+      "metrics": {
+        "Precision@10": 0.12045108198720084,
+        "Equality_Gain@10": -2.438770770896869,
+        "Pagerank_EG@10": 5.594020824786801,
+        "Closeness_EG@10": 11.812914851674618
+      },
+      "split_evidence": {
+        "dataset": "unc",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3985,
+        "splits": {
+          "train/edge": "a5798112264dfc245d4aa90a3a7966d54e6322830f4684a783e9e4c4af4c0f6d",
+          "valid/edge": "85793e957aa6911677424f05d5a063d54039461ee40bf12aae3246f53d0483ea",
+          "valid/edge_neg": "698c9f38bd4529a5bef352b41b9fa5071a26ad1cbf059d410c875d45bf6be44d",
+          "test/edge": "6d50c7669f8b48e1877ce40ee8fb11d0e88b81b545865af3acbe2608210f9cb4",
+          "test/edge_neg": "771691971d2412cc3d83e1d4286d898a43a94debe1178e2d63711be1deddddcf"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-In",
+      "config": "lambda_fair_1.0_beta_5.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.12170070100579276,
+        "Equality_Gain@10": 0.5896300356666306,
+        "Pagerank_EG@10": 7.803430725757744,
+        "Closeness_EG@10": 13.108914243235716
+      },
+      "split_evidence": {
+        "dataset": "unc",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3985,
+        "splits": {
+          "train/edge": "a5798112264dfc245d4aa90a3a7966d54e6322830f4684a783e9e4c4af4c0f6d",
+          "valid/edge": "85793e957aa6911677424f05d5a063d54039461ee40bf12aae3246f53d0483ea",
+          "valid/edge_neg": "698c9f38bd4529a5bef352b41b9fa5071a26ad1cbf059d410c875d45bf6be44d",
+          "test/edge": "6d50c7669f8b48e1877ce40ee8fb11d0e88b81b545865af3acbe2608210f9cb4",
+          "test/edge_neg": "771691971d2412cc3d83e1d4286d898a43a94debe1178e2d63711be1deddddcf"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-Pre",
+      "config": "preproc_alpha_1.0_beta_1.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.10917403230722458,
+        "Equality_Gain@10": 1.2089798991823997,
+        "Pagerank_EG@10": 10.376692647014474,
+        "Closeness_EG@10": 14.347627149623221
+      },
+      "split_evidence": {
+        "dataset": "unc",
+        "training_seed": 8,
+        "split_seed": 8,
+        "num_nodes": 3985,
+        "splits": {
+          "train/edge": "a5798112264dfc245d4aa90a3a7966d54e6322830f4684a783e9e4c4af4c0f6d",
+          "valid/edge": "85793e957aa6911677424f05d5a063d54039461ee40bf12aae3246f53d0483ea",
+          "valid/edge_neg": "698c9f38bd4529a5bef352b41b9fa5071a26ad1cbf059d410c875d45bf6be44d",
+          "test/edge": "6d50c7669f8b48e1877ce40ee8fb11d0e88b81b545865af3acbe2608210f9cb4",
+          "test/edge_neg": "771691971d2412cc3d83e1d4286d898a43a94debe1178e2d63711be1deddddcf"
+        },
+        "temporal": false
+      }
+    }
+  ],
+  "pairing_verified": true,
+  "protocol": "table4_paths_table15_split_resampled"
+}

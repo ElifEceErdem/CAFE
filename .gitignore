@@ -119,3 +119,9 @@ audit_p5.md
 baselines/__pycache__/
 backbone/__pycache__/
 core/__pycache__/
+
+# ---------------------------------------------------------------------------
+# Reproduction pipeline outputs (python -m reproduce build / job campaigns)
+# ---------------------------------------------------------------------------
+/build/
+/logs/
