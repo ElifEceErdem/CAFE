@@ -84,6 +84,8 @@ def argument():
     parser.add_argument('--runs', type=int, default=3)
     parser.add_argument('--results_file', type=str, default='results_hybrid.json')
     parser.add_argument('--save_results', type=str2bool, default=True)
+    parser.add_argument('--acceptance_probe_jsonl', default=None,
+                        help='Optional scalar-only acceptance pilot output; no predictions saved')
     parser.add_argument('--split_file', type=str, default=None, help='Path to pre-split dataset file')
     parser.add_argument('--seed', type=int, default=42)
 
@@ -331,6 +333,14 @@ def main():
                     )
                     res['Delta_DPR'] = dpr_change
                 
+                if args.acceptance_probe_jsonl:
+                    from core.acceptance_probe import record_acceptance
+                    record_acceptance(
+                        args.acceptance_probe_jsonl, dataset=args.data_name,
+                        method='HL-GNN', run=run, config=combo_key, recs=recs_by_u,
+                        train_edges=train_edges_cpu, test_edges=pos_test_edge_cpu,
+                        num_nodes=num_nodes, main_metrics=res)
+
                 run_res[combo_key] = res
                 results_by_config[combo_key].append(res)
         

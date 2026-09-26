@@ -1,0 +1,24 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=24:00:00
+#SBATCH --array=1-4%2
+#SBATCH --job-name=t04_acc_replay
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t04_acceptance_replay_%A_%a.out
+
+# All tasks use Oklahoma: 1=HL-GNN, 2=Fusion, 3=CAFE-In, 4=CAFE-Pre.
+# RA is reused from the validated pilot. No duplicate RA task or fake ten-run sample.
+set -euo pipefail
+REPO=/home/eerdem/workspace/CAFE
+PYTHON_BIN=/var/scratch/eerdem/miniconda3/envs/hl_gnn/bin/python
+: "${REPLAY_ROOT:?Set REPLAY_ROOT to the prepared isolated replay directory}"
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+export PYTHONDONTWRITEBYTECODE=1
+TASK_CACHE=$(mktemp -d /tmp/cafe-acceptance-replay.XXXXXX)
+export MPLCONFIGDIR=${TASK_CACHE}
+cd "${REPO}"
+"${PYTHON_BIN}" -u experiments/replay_table4_acceptance.py \
+    --output-root "${REPLAY_ROOT}" --arm-index "${SLURM_ARRAY_TASK_ID}"

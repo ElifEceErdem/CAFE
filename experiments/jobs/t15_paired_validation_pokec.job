@@ -1,0 +1,72 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=166:00:00
+#SBATCH --array=3
+#SBATCH --job-name=t15_pk
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t15_paired_validation_pokec_%A_%a.out
+
+# Pokec-n continuation for the isolated paper Table 15 validation campaign.
+#
+# The frozen paper configuration selects beta=1 for CAFE-In and beta=5 for
+# the separately tuned fusion-only control (HL-GNN+RA). Passing the optional
+# --selected_configs manifest makes run_significance.py enforce matched beta,
+# which is not the published protocol. This wrapper therefore supplies the
+# same frozen CAFE values explicitly through _common.sh and retains fusion
+# beta=5. The selected config path and SHA-256 are printed in the job log.
+#
+# Metric semantics in the unchanged scientific code:
+#   - Degree EG: certified legacy directed-indegree definition;
+#   - PageRank/Closeness EG: simple-undirected set-union graphs.
+
+REPO=/home/eerdem/workspace/CAFE
+RESULTS_ROOT=${RESULTS_ROOT:-${REPO}/results/validation/20260902_table15_rerun}
+export RESULTS_ROOT
+
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+SELECTED_CONFIGS=${REPO}/experiments/configs/legacy_best_configs_selected.csv
+SOURCE_MANIFEST=${REPO}/experiments/jobs/t15_paired_validation_pokec.job
+
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+if [ ! -r "${SELECTED_CONFIGS}" ]; then
+  echo "FATAL: cannot read ${SELECTED_CONFIGS}" >&2
+  exit 1
+fi
+
+source "${COMMON_SH}"
+if [ "${DS}" != "pokec_n" ]; then
+  echo "FATAL: this wrapper is restricted to array task 3 (pokec_n)" >&2
+  exit 1
+fi
+cd ${REPO}/experiments
+
+OUT=${RESULTS_ROOT}/table15/${DS}/significance
+mkdir -p "${OUT}"
+
+echo "paper table         : 15 (historical job/module number 16)"
+echo "validation root     : ${RESULTS_ROOT}"
+echo "split resampling    : True"
+echo "selected configs    : ${SELECTED_CONFIGS}"
+echo "selected config SHA : $(sha256sum "${SELECTED_CONFIGS}" | awk '{print $1}')"
+echo "fusion protocol     : separately selected beta=${FUSION_BETA}"
+echo "Degree EG semantics : legacy directed indegree"
+echo "PR/Cl EG semantics  : simple undirected set union"
+
+python -u run_significance.py ${COMMON} \
+    --num_seeds 10 --seed_start 0 --vary_split True \
+    --cafe_in_lambda ${IN_LF} --cafe_in_beta ${IN_BETA} --cafe_in_lam ${IN_LAM} \
+    --cafe_pre_alpha ${PRE_A} --cafe_pre_beta ${PRE_BETA} --cafe_pre_lam ${PRE_LAM} \
+    --fusion_beta ${FUSION_BETA} \
+    --protocol paired \
+    --source_manifest "${SOURCE_MANIFEST}" \
+    --use_demographics True \
+    --centrality_types pagerank,closeness \
+    --out_csv "${OUT}/per_seed_metrics_${DS}.csv" ${EXTRA}
+
+echo "Done."

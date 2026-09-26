@@ -1,0 +1,83 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=160:00:00
+#SBATCH --job-name=t04_arm
+#SBATCH --output=/var/scratch/eerdem/cafe_logs/t04_cafe_arm_%A_%a.out
+
+# Single-arm variant of t04_cafe.job.
+#
+# t04_cafe.job runs its seven arms in sequence on one GPU. The arms are
+# independent run_cafe.py invocations, so when the cluster has spare GPUs the
+# remaining ones can be spread across nodes instead:
+#
+#   sbatch --export=ALL,ARM=cafe_in    --array=3 t04_cafe_arm.job
+#   sbatch --export=ALL,ARM=cafe_pre   --array=3 t04_cafe_arm.job
+#   sbatch --export=ALL,ARM=cafe_in_b  --array=3 t04_cafe_arm.job
+#   sbatch --export=ALL,ARM=cafe_pre_b --array=3 t04_cafe_arm.job
+#
+# Redirect into an isolated validation campaign with RESULTS_ROOT, exactly as
+# submit_oklahoma_validation.sh does for the standard jobs:
+#   sbatch --export=ALL,ARM=cafe_in,RESULTS_ROOT=<campaign>/table_runs \\
+#          --array=3 t04_cafe_arm.job
+#
+# Array index -> dataset, exactly as in t04_cafe.job:
+#   0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
+#
+# Hyperparameters are deliberately NOT duplicated here -- they are read from
+# _common.sh, so this file cannot drift from t04_cafe.job when a published
+# configuration changes. Only the two boost-enabled full-pipeline arms are
+# supported; fusion_only sweeps beta and stays in t04_cafe.job, and the
+# coreness/mobility ablations have their own wrapper (t07_ablation_arm.job).
+#
+# NOTE: under Slurm $0 is a copy of this script in the spool directory, so
+# dirname "$0" does NOT point at experiments/jobs. Source by absolute path and
+# fail loudly -- set -e lives inside _common.sh, so a silent miss here would
+# leave every variable unset and run the python calls from the wrong cwd.
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
+cd ${REPO}/experiments
+BASE=${RESULTS_ROOT}/${DS}
+
+ARM=${ARM:?set ARM=cafe_in|cafe_pre|cafe_in_b|cafe_pre_b}
+
+# run_cafe.py takes the penalty strength under a DIFFERENT flag per mode:
+#   inproc  -> --lambda_fair    (--preproc_alpha ignored)
+#   preproc -> --preproc_alpha  (--lambda_fair ignored)
+# Passing --lambda_fair in preproc mode silently leaves --preproc_alpha at its
+# default sweep "0.5,1.0,2.0" and the selected alpha is never run.
+#
+# CAFE-In^-B and CAFE-Pre^-B are SEPARATELY selected configurations, not the
+# full pipeline with the boost switched off -- they read INB_*/PREB_* and pin
+# lambda_mobility to 0, exactly as t04_cafe.job does. Deriving them from
+# IN_*/PRE_* would silently run the wrong arm.
+case ${ARM} in
+  cafe_in)    MODE=inproc;  PEN_FLAG=--lambda_fair;   PEN=${IN_LF};  BETA=${IN_BETA};   LAM=${IN_LAM}; BOOST=True  ;;
+  cafe_pre)   MODE=preproc; PEN_FLAG=--preproc_alpha; PEN=${PRE_A};  BETA=${PRE_BETA};  LAM=${PRE_LAM}; BOOST=True  ;;
+  cafe_in_b)  MODE=inproc;  PEN_FLAG=--lambda_fair;   PEN=${INB_LF}; BETA=${INB_BETA};  LAM=0.0; BOOST=False ;;
+  cafe_pre_b) MODE=preproc; PEN_FLAG=--preproc_alpha; PEN=${PREB_A}; BETA=${PREB_BETA}; LAM=0.0; BOOST=False ;;
+  *) echo "unknown ARM '${ARM}' (expected cafe_in|cafe_pre|cafe_in_b|cafe_pre_b)" >&2; exit 1 ;;
+esac
+
+echo "=== ${ARM} on ${DS} (${MODE}, ${PEN_FLAG}=${PEN}, beta=${BETA}, lambda_mob=${LAM}, boost=${BOOST}) ==="
+
+mkdir -p ${BASE}/${ARM}
+
+# ${EXTRA} stays last: on pokec_n/brightkite it re-specifies --eval_steps and
+# --patience, and argparse keeps the final occurrence. Moving it earlier would
+# silently restore the full-graph validation cadence from ${COMMON}.
+python -u run_cafe.py ${COMMON} --runs 10 \
+    --penalization_mode ${MODE} --use_mobility_boost ${BOOST} \
+    ${PEN_FLAG} "${PEN}" --beta_ra "${BETA}" --lambda_mobility "${LAM}" \
+    --coreness_alpha 1.0 ${EG} \
+    --results_file ${BASE}/${ARM}/results_${ARM}_${DS}_${TS}.json ${EXTRA}
+
+echo "Done."

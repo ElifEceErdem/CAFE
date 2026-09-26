@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=166:00:00
+#SBATCH --job-name=cl_v1_rerun
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/closeness_v1_%A_%a.out
+# GROUP=table11: indices 0..7; table15: 0..19; baselines: 0..5.
+# Submit with afterok dependencies on the matching dataset gate; never export automatically.
+set -euo pipefail
+: "${CLOSENESS_V1_ROOT:?Provide prepared campaign root}"
+: "${GROUP:?Set table11, table15, or baselines}"
+export PYTHONDONTWRITEBYTECODE=1
+export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+V1_CACHE=$(mktemp -d /tmp/cafe-cl-v1-gpu.XXXXXX)
+export MPLCONFIGDIR=${V1_CACHE}
+cd /home/eerdem/workspace/CAFE
+/var/scratch/eerdem/miniconda3/envs/hl_gnn/bin/python -u experiments/reevaluate_closeness_v1.py \
+    --output-root "${CLOSENESS_V1_ROOT}" --group "${GROUP}" --index "${SLURM_ARRAY_TASK_ID}"

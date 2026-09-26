@@ -1133,7 +1133,8 @@ class BaselineWrapper:
         return torch.cat(all_scores, dim=0)
     
     def test(self, data, split_edge, batch_size, evaluator, eval_metric='all', fairness_mode='indegree',
-             use_equality_gain=False, use_centrality_gain=False, centrality_types=None):
+             use_equality_gain=False, use_centrality_gain=False, centrality_types=None,
+             acceptance_probe=None):
         """Evaluate baseline model with comprehensive metrics"""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -1305,6 +1306,8 @@ class BaselineWrapper:
             for k, val in ndkl_res['ndkl_scores'].items():
                 results[f'NDKL@{k}'] = val
 
+        if acceptance_probe is not None:
+            acceptance_probe(recs_by_u, train_edges, pos_test_edge, self.num_nodes, results)
         return results
 
 

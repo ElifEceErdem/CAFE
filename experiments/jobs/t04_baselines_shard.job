@@ -1,0 +1,83 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=48:00:00
+#SBATCH --job-name=t04_bshard
+#SBATCH --output=/var/scratch/eerdem/cafe_logs/t04_baselines_shard_%A_%a.out
+
+# Seed-sharded variant of t04_baselines.job.
+#
+# t04_baselines.job runs all 10 seeds in sequence on one GPU (~10 h/seed on
+# pokec_n, so ~100 h). run_baselines.py seeds every run explicitly --
+#     for run in range(args.runs): run_seed = args.seed + run; set_seed(run_seed)
+# -- and the split is fixed (seed 42 inside get_edge_split), so the seeds are
+# INDEPENDENT and can be split across GPUs. Shard s covers seeds
+#   [42 + s*SEEDS_PER_SHARD, 42 + (s+1)*SEEDS_PER_SHARD)
+# and the union reproduces exactly what `--seed 42 --runs 10` would produce.
+#
+# Shard ONLY by seed, never by method: within one run the methods execute in a
+# fixed order and consume the run's RNG stream in sequence, so a shard must
+# always run the full ${METHODS} list for its seeds to stay bit-comparable.
+#
+#   sbatch --array=0-4 t04_baselines_shard.job                 # pokec_n, 5x2 seeds
+#   sbatch --array=0-4 --export=ALL,DS_INDEX=1 t04_baselines_shard.job
+#
+# The array index selects the SHARD, not the dataset (t04_baselines.job uses it
+# for the dataset). Pick the dataset with DS_INDEX instead:
+#   0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
+#
+# Shard outputs go to a staging tree OUTSIDE results_repro: each shard holds
+# only a partial seed set, and a partial file inside results_repro would be
+# picked up by the *.json globs in analysis/generate_final_tables.py. Merge
+# them with experiments/merge_baseline_shards.py, which writes the single
+# 10-seed file into results_repro.
+#
+# NOTE: under Slurm $0 is a copy of this script in the spool directory, so
+# dirname "$0" does NOT point at experiments/jobs. Source by absolute path and
+# fail loudly -- set -e lives inside _common.sh, so a silent miss here would
+# leave every variable unset and run the python calls from the wrong cwd.
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+
+# _common.sh derives DS from SLURM_ARRAY_TASK_ID. Capture the shard index
+# first, then hand _common.sh the DATASET index instead.
+SHARD=${SLURM_ARRAY_TASK_ID:?submit this file as a Slurm array (--array=0-4)}
+export SLURM_ARRAY_TASK_ID=${DS_INDEX:-3}
+source "${COMMON_SH}"
+cd ${REPO}/experiments
+
+SEEDS_PER_SHARD=${SEEDS_PER_SHARD:-2}
+BASE_SEED=${BASE_SEED:-42}
+SEED_START=$(( BASE_SEED + SHARD * SEEDS_PER_SHARD ))
+
+SHARD_ROOT=/var/scratch/eerdem/cafe_baseline_shards/${DS}/seed_${SEED_START}
+mkdir -p "${SHARD_ROOT}"
+
+# Same method set as t04_baselines.job: the attribute-dependent baselines only
+# exist for the datasets that carry sensitive attributes.
+METHODS="random,pa,cn,aa,ra,lightgcn,ssnet,cross_link_bias,ltlp,tailsteak"
+if [ "${DS}" = "oklahoma" ] || [ "${DS}" = "unc" ] || [ "${DS}" = "pokec_n" ]; then
+  METHODS="${METHODS},fairadj,lba,moral"
+fi
+
+echo "=== shard ${SHARD}: ${DS} seeds ${SEED_START}..$(( SEED_START + SEEDS_PER_SHARD - 1 )) ==="
+echo "=== out: ${SHARD_ROOT} ==="
+
+python -u run_baselines.py \
+    --data_name ${DS} --data_path ${DATA} \
+    --encoder HLGNN \
+    --methods "${METHODS}" \
+    --runs ${SEEDS_PER_SHARD} --seed ${SEED_START} \
+    --epochs 300 --batch_size 16384 \
+    --use_equality_gain True --use_centrality_gain True \
+    --centrality_types pagerank,closeness \
+    --results_dir "${SHARD_ROOT}" ${SPLIT}
+
+echo "Done."

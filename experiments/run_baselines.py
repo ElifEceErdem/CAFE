@@ -116,6 +116,8 @@ def argument():
     parser.add_argument('--use_centrality_gain', type=str2bool, default=True)
 
     parser.add_argument('--results_dir', type=str, default='../results')
+    parser.add_argument('--acceptance_probe_jsonl', default=None,
+                        help='Optional scalar-only RA acceptance pilot output; no predictions saved')
     return parser.parse_args()
 
 
@@ -141,12 +143,23 @@ def run_one_method(method, data, split_edge, num_nodes, sens_attr, args, run_see
     wrapper.fit(data, split_edge, epochs=epochs, batch_size=batch_size,
                 sens_attr=sens_attr if needs_sens else None)
 
+    acceptance_probe = None
+    if args.acceptance_probe_jsonl and method == 'ra':
+        from core.acceptance_probe import record_acceptance
+        def acceptance_probe(recs, train_edges, test_edges, n, metrics):
+            record_acceptance(
+                args.acceptance_probe_jsonl, dataset=args.data_name, method='RA',
+                run=run_seed - args.seed, config='resource_allocation', recs=recs,
+                train_edges=train_edges, test_edges=test_edges, num_nodes=n,
+                main_metrics=metrics)
+
     res = wrapper.test(
         data, split_edge, batch_size=batch_size, evaluator=None,
         eval_metric='all', fairness_mode=args.fairness_mode,
         use_equality_gain=args.use_equality_gain,
         use_centrality_gain=args.use_centrality_gain,
         centrality_types=[x.strip() for x in args.centrality_types.split(',')],
+        acceptance_probe=acceptance_probe,
     )
 
     del wrapper

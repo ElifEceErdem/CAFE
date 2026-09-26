@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=166:00:00
+#SBATCH --job-name=cl_v1_missing
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/closeness_v1_missing_%A_%a.out
+# Partition, array and (baseline only) TitanRTX constraint are set at submission.
+set -euo pipefail
+: "${CLOSENESS_MISSING_ROOT:?Provide the prepared missing-experiment campaign}"
+export PYTHONDONTWRITEBYTECODE=1
+export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+MISSING_CACHE=$(mktemp -d /tmp/cafe-cl-missing.XXXXXX)
+export MPLCONFIGDIR=${MISSING_CACHE}
+cd /home/eerdem/workspace/CAFE
+/var/scratch/eerdem/miniconda3/envs/hl_gnn/bin/python -u experiments/complete_closeness_v1.py \
+    --output-root "${CLOSENESS_MISSING_ROOT}" --index "${SLURM_ARRAY_TASK_ID}"

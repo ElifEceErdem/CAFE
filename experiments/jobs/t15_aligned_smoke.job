@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=00:45:00
+#SBATCH --job-name=t15_align_smoke
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t15_aligned_smoke_%j.out
+set -euo pipefail
+REPO=/home/eerdem/workspace/CAFE
+PYTHON_BIN=/var/scratch/eerdem/miniconda3/envs/hl_gnn/bin/python
+: "${SMOKE_ROOT:?Set SMOKE_ROOT to the prepared test directory}"
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+export PYTHONDONTWRITEBYTECODE=1
+TASK_CACHE=$(mktemp -d /tmp/cafe-t15-smoke.XXXXXX)
+export MPLCONFIGDIR=${TASK_CACHE}
+cd "${REPO}"
+"${PYTHON_BIN}" tests/test_table15_aligned.py
+"${PYTHON_BIN}" -u experiments/smoke_table15_aligned.py --output-root "${SMOKE_ROOT}"

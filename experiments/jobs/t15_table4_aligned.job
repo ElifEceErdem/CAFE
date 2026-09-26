@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=48GB
+#SBATCH --time=166:00:00
+#SBATCH --array=0-49%4
+#SBATCH --job-name=t15_t04_aligned
+#SBATCH --output=/home/eerdem/workspace/CAFE/experiments/jobs/logs/t15_table4_aligned_%A_%a.out
+
+# PREPARED ONLY: not submitted with Table 11. Review before separate approval.
+# Blocks of ten seeds (0..9): Ego-FB, Oklahoma, UNC, Pokec-n, Brightkite.
+# Every task runs all five method paths on one GPU, verifying shared splits.
+set -euo pipefail
+REPO=/home/eerdem/workspace/CAFE
+PYTHON_BIN=/var/scratch/eerdem/miniconda3/envs/hl_gnn/bin/python
+: "${PAIRED_ROOT:?Set PAIRED_ROOT to a separately reviewed prepared directory}"
+export LD_LIBRARY_PATH=/cm/local/apps/cuda-driver/libs/current/lib64:${LD_LIBRARY_PATH:-}
+export PYTHONDONTWRITEBYTECODE=1
+TASK_CACHE=$(mktemp -d /tmp/cafe-t15-aligned.XXXXXX)
+export MPLCONFIGDIR=${TASK_CACHE}
+cd "${REPO}"
+"${PYTHON_BIN}" -u experiments/prepare_table15_aligned.py \
+    --output-root "${PAIRED_ROOT}" --task-index "${SLURM_ARRAY_TASK_ID}"

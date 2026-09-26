@@ -1,0 +1,83 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32GB
+#SBATCH --time=96:00:00
+#SBATCH --job-name=t07_arm
+#SBATCH --output=/var/scratch/eerdem/cafe_logs/t07_ablation_arm_%A_%a.out
+
+# Single-arm variant of t07_ablation.job.
+#
+# t07_ablation.job runs ci_in -> ci_pre -> mb_post in sequence on one GPU. On
+# pokec_n that is ~51 h + ~50 h + ~26 h back to back, because neither
+# run_coreness_inverse.py nor run_mobility_boost.py accepts the fast-eval flags
+# (_common.sh hands them ${SPLIT}, not ${EXTRA}), so both evaluate the full
+# 33,550-user test set every eval step. The three arms are independent, so
+# giving each its own GPU turns ~127 h into ~51 h:
+#
+#   sbatch --export=ALL,ARM=ci_in   --array=3 t07_ablation_arm.job
+#   sbatch --export=ALL,ARM=ci_pre  --array=3 t07_ablation_arm.job
+#   sbatch --export=ALL,ARM=mb_post --array=3 t07_ablation_arm.job
+#
+# Redirect into an isolated validation campaign with RESULTS_ROOT, exactly as
+# submit_oklahoma_validation.sh does for the standard jobs:
+#   sbatch --export=ALL,ARM=ci_in,RESULTS_ROOT=<campaign>/table_runs \
+#          --array=3 t07_ablation_arm.job
+#
+# Array index -> dataset, exactly as in t07_ablation.job:
+#   0=ego-facebook 1=oklahoma 2=unc 3=pokec_n 4=brightkite
+#
+# Hyperparameters are deliberately NOT duplicated here -- they are read from
+# _common.sh, so this file cannot drift from t07_ablation.job when a published
+# configuration changes.
+#
+# NOTE: under Slurm $0 is a copy of this script in the spool directory, so
+# dirname "$0" does NOT point at experiments/jobs. Source by absolute path and
+# fail loudly -- set -e lives inside _common.sh, so a silent miss here would
+# leave every variable unset and run the python calls from the wrong cwd.
+REPO=/home/eerdem/workspace/CAFE
+COMMON_SH=${REPO}/experiments/jobs/_common.sh
+if [ ! -r "${COMMON_SH}" ]; then
+  echo "FATAL: cannot read ${COMMON_SH}" >&2
+  exit 1
+fi
+source "${COMMON_SH}"
+cd ${REPO}/experiments
+BASE=${RESULTS_ROOT}/${DS}
+
+ARM=${ARM:?set ARM=ci_in|ci_pre|mb_post}
+
+mkdir -p ${BASE}/${ARM}
+RESULTS_FILE=${BASE}/${ARM}/results_${ARM}_${DS}_${TS}.json
+
+# These runners take ${SPLIT} and NOT ${EXTRA}: they reject the fast-eval
+# flags, so passing ${EXTRA} here would abort the job on an unknown argument.
+case ${ARM} in
+  ci_in|ci_pre)
+    if [ "${ARM}" = "ci_in" ]; then
+      METHOD=coreness_inverse_inproc;  LAMBDA=${CI_IN}
+    else
+      METHOD=coreness_inverse_preproc; LAMBDA=${CI_PRE}
+    fi
+    echo "=== ${ARM} on ${DS} (${METHOD}, lambda=${LAMBDA}) ==="
+    python -u run_coreness_inverse.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --fairness_method ${METHOD} --lambda_fair "${LAMBDA}" \
+        --use_stratified False --use_pa_aware False --use_ndkl False \
+        --results_file ${RESULTS_FILE} ${SPLIT}
+    ;;
+  mb_post)
+    echo "=== mb_post on ${DS} (lambda=${MB_POST}) ==="
+    python -u run_mobility_boost.py ${COMMON} --runs 10 --coreness_alpha 1.0 ${EG} \
+        --reranking_approach boost --boosting_mode continuous \
+        --lambda_mobility "${MB_POST}" --lambda_bridge 0.0 \
+        --use_stratified False --use_pa_aware False --use_ndkl False \
+        --use_degree_plots False \
+        --results_file ${RESULTS_FILE} ${SPLIT}
+    ;;
+  *)
+    echo "unknown ARM '${ARM}' (expected ci_in|ci_pre|mb_post)" >&2; exit 1 ;;
+esac
+
+echo "Done."
