@@ -17,6 +17,7 @@ dependencies:
   - gensim=4.4
   - matplotlib-base=3.10
   - tqdm=4.67
+  - pytest=8
   - pip
   - pip:
       # The Conda CPU extension builds require GLIBC 2.29. The official PyG
