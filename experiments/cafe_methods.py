@@ -105,7 +105,7 @@ def add_common_args(parser):
                         help='Approximate-closeness pivots (0 = adaptive)')
     parser.add_argument('--closeness_epsilon', type=float, default=0.1)
     parser.add_argument('--source_manifest', type=str, default=None,
-                        help='Optional egfix source-hash manifest for provenance')
+                        help='Optional source-hash manifest for provenance')
 
     parser.add_argument('--seed', type=int, default=42)
     return parser

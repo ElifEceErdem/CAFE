@@ -30,7 +30,7 @@ Usage:
         --cafe_pre_alpha 1.0 --cafe_pre_beta 0.5 --cafe_pre_lam 0.5 \
         --runs 3 \
         --acceptance_csv ../results/oklahoma/acceptance_eg/acceptance_eg_oklahoma.csv \
-        --exposure_dir ../analysis/plots/coreness_by_group
+        --exposure_dir ../outputs/coreness_by_group
 """
 
 import os

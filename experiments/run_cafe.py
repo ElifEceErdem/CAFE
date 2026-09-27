@@ -171,7 +171,7 @@ def argument():
                         help='Approximate-closeness pivots (0 = adaptive)')
     parser.add_argument('--closeness_epsilon', type=float, default=0.1)
     parser.add_argument('--source_manifest', type=str, default=None,
-                        help='Optional egfix source-hash manifest for provenance')
+                        help='Optional source-hash manifest for provenance')
 
     # Memory / evaluation chunking
     parser.add_argument('--eval_chunk_size', type=int, default=1024,
@@ -736,7 +736,7 @@ def main():
         experiment_info['config_name'] = config_name
         experiment_info['selection_mode'] = bool(args.selection_mode)
         experiment_info['evaluation_split'] = args.evaluation_split
-        # Compatibility alias for early egfix tooling.  Both fields describe
+        # Compatibility alias for older tooling.  Both fields describe
         # the same held-out metric boundary.
         experiment_info['metric_split'] = args.evaluation_split
         experiment_info['test_metrics_evaluated'] = (

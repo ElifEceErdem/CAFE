@@ -1,0 +1,139 @@
+{
+  "task": {
+    "index": 19,
+    "dataset": "pokec_n",
+    "seed": 9,
+    "split_seed": 9
+  },
+  "methods": [
+    {
+      "method": "RA",
+      "config": "resource_allocation",
+      "metrics": {
+        "Precision@10": 0.050301025274196214,
+        "Equality_Gain@10": 4.565874042383842,
+        "Pagerank_EG@10": 4.551088004879248,
+        "Closeness_EG@10": 14.352345692766502
+      },
+      "split_evidence": {
+        "dataset": "pokec_n",
+        "training_seed": 9,
+        "split_seed": 9,
+        "num_nodes": 66569,
+        "splits": {
+          "train/edge": "6335aa1806bdd316ff7f9ab576225a71d283b5dc85b0e2f3de81747da6a6ce9b",
+          "valid/edge": "c7233b29a2305bf76279b98160e009203a5b0b5dc0f37521d9e4c9ca88661ea0",
+          "valid/edge_neg": "f220cd8e429b67c98e75ed52e7dd80bed6ca727a91b6dc26f547e6b99c310a0f",
+          "test/edge": "a1517e24b08f3766bf4214384f5bc53c777f9f18d115d673a9a7cb4966f0a550",
+          "test/edge_neg": "4c58f52e824da96f5d0f5dd8acb9f014be12c47a8a268ebfb07e6b7b57eb300b"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "HL-GNN",
+      "config": "beta_0.0_lambda_0.0",
+      "metrics": {
+        "Precision@10": 0.04319563662374584,
+        "Equality_Gain@10": -8.337160481544124,
+        "Pagerank_EG@10": -1.8009577313543204,
+        "Closeness_EG@10": 6.684270343928519
+      },
+      "split_evidence": {
+        "dataset": "pokec_n",
+        "training_seed": 9,
+        "split_seed": 9,
+        "num_nodes": 66569,
+        "splits": {
+          "train/edge": "6335aa1806bdd316ff7f9ab576225a71d283b5dc85b0e2f3de81747da6a6ce9b",
+          "valid/edge": "c7233b29a2305bf76279b98160e009203a5b0b5dc0f37521d9e4c9ca88661ea0",
+          "valid/edge_neg": "f220cd8e429b67c98e75ed52e7dd80bed6ca727a91b6dc26f547e6b99c310a0f",
+          "test/edge": "a1517e24b08f3766bf4214384f5bc53c777f9f18d115d673a9a7cb4966f0a550",
+          "test/edge_neg": "4c58f52e824da96f5d0f5dd8acb9f014be12c47a8a268ebfb07e6b7b57eb300b"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "Fusion",
+      "config": "lambda_fair_0.0_beta_5.0_lam_0.0",
+      "metrics": {
+        "Precision@10": 0.055466142107766514,
+        "Equality_Gain@10": 0.042304248333499155,
+        "Pagerank_EG@10": 2.928309596392673,
+        "Closeness_EG@10": 12.76818102078603
+      },
+      "split_evidence": {
+        "dataset": "pokec_n",
+        "training_seed": 9,
+        "split_seed": 9,
+        "num_nodes": 66569,
+        "splits": {
+          "train/edge": "6335aa1806bdd316ff7f9ab576225a71d283b5dc85b0e2f3de81747da6a6ce9b",
+          "valid/edge": "c7233b29a2305bf76279b98160e009203a5b0b5dc0f37521d9e4c9ca88661ea0",
+          "valid/edge_neg": "f220cd8e429b67c98e75ed52e7dd80bed6ca727a91b6dc26f547e6b99c310a0f",
+          "test/edge": "a1517e24b08f3766bf4214384f5bc53c777f9f18d115d673a9a7cb4966f0a550",
+          "test/edge_neg": "4c58f52e824da96f5d0f5dd8acb9f014be12c47a8a268ebfb07e6b7b57eb300b"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-In",
+      "config": "lambda_fair_0.05_beta_1.0_lam_0.1",
+      "metrics": {
+        "Precision@10": 0.050816642823075464,
+        "Equality_Gain@10": 3.698020097502736,
+        "Pagerank_EG@10": 5.107450876756546,
+        "Closeness_EG@10": 14.983966298048104
+      },
+      "split_evidence": {
+        "dataset": "pokec_n",
+        "training_seed": 9,
+        "split_seed": 9,
+        "num_nodes": 66569,
+        "splits": {
+          "train/edge": "6335aa1806bdd316ff7f9ab576225a71d283b5dc85b0e2f3de81747da6a6ce9b",
+          "valid/edge": "c7233b29a2305bf76279b98160e009203a5b0b5dc0f37521d9e4c9ca88661ea0",
+          "valid/edge_neg": "f220cd8e429b67c98e75ed52e7dd80bed6ca727a91b6dc26f547e6b99c310a0f",
+          "test/edge": "a1517e24b08f3766bf4214384f5bc53c777f9f18d115d673a9a7cb4966f0a550",
+          "test/edge_neg": "4c58f52e824da96f5d0f5dd8acb9f014be12c47a8a268ebfb07e6b7b57eb300b"
+        },
+        "temporal": false
+      }
+    },
+    {
+      "method": "CAFE-Pre",
+      "config": "preproc_alpha_0.05_beta_2.0_lam_0.5",
+      "metrics": {
+        "Precision@10": 0.05444086790652666,
+        "Equality_Gain@10": -2.3471594866182466,
+        "Pagerank_EG@10": 3.5692369679013543,
+        "Closeness_EG@10": 15.87789610560211
+      },
+      "split_evidence": {
+        "dataset": "pokec_n",
+        "training_seed": 9,
+        "split_seed": 9,
+        "num_nodes": 66569,
+        "splits": {
+          "train/edge": "6335aa1806bdd316ff7f9ab576225a71d283b5dc85b0e2f3de81747da6a6ce9b",
+          "valid/edge": "c7233b29a2305bf76279b98160e009203a5b0b5dc0f37521d9e4c9ca88661ea0",
+          "valid/edge_neg": "f220cd8e429b67c98e75ed52e7dd80bed6ca727a91b6dc26f547e6b99c310a0f",
+          "test/edge": "a1517e24b08f3766bf4214384f5bc53c777f9f18d115d673a9a7cb4966f0a550",
+          "test/edge_neg": "4c58f52e824da96f5d0f5dd8acb9f014be12c47a8a268ebfb07e6b7b57eb300b"
+        },
+        "temporal": false
+      }
+    }
+  ],
+  "sources": {
+    "RA": "runs/2026-09-10_exact_closeness_completion/table15/pokec_n/seed_9/ra",
+    "HL-GNN": "runs/2026-09-10_exact_closeness_completion/table15/pokec_n/seed_9/hl-gnn",
+    "Fusion": "runs/2026-09-10_exact_closeness_completion/table15/pokec_n/seed_9/fusion",
+    "CAFE-In": "runs/2026-09-10_exact_closeness_completion/table15/pokec_n/seed_9/cafe-in",
+    "CAFE-Pre": "runs/2026-09-10_exact_closeness_completion/table15/pokec_n/seed_9/cafe-pre"
+  },
+  "pairing_verified": true,
+  "protocol": "table4_paths_table15_split_resampled_exact_closeness_v1"
+}

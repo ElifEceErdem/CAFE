@@ -1,117 +1,117 @@
 # CAFE: Coreness-Aware Fair Link Recommendation
 
-Code, recorded results and reproduction pipeline for the ToRS paper
-**Coreness-Aware Fair Link Recommendation**
-([`paper/CAFE_ToRS_EceErdem.pdf`](paper/CAFE_ToRS_EceErdem.pdf)).
-CAFE combines an HL-GNN link predictor with coreness-aware pre-processing,
-in-processing and ranking interventions.
-
-## Reproduce the paper's tables and figures
-
-Every table and figure of the paper is rebuilt from recorded results and every
-printed number is checked against the manuscript:
-
-```bash
-conda env create -f environment-smoke.yml        # CPU environment
-conda activate cafe-smoke
-make verify-paper                                # builds build/, compares 1,612 printed values
-```
-
-`make verify-paper` needs no GPU and no raw data: the builders read the
-checksummed result snapshot in [`evidence/`](evidence/).  Output:
-
-```text
-ID      ok  known  fail  missing  verdict
-T04    511      1     0        0  PASS
-T07    438      7     0        0  PASS
-...
-```
-
-*known* cells are documented differences between a printed value and its
-recorded source (see [`reproduce/known_deviations.csv`](reproduce/known_deviations.csv));
-*missing* cells belong to the two results that must be re-run (Table 6(a),
-Table 17).  The artifact map, the verification rules and how to re-run each
-experiment are in [`reproduce/README.md`](reproduce/README.md).
-
-To re-run the experiment behind one table on a Slurm cluster and verify the
-fresh numbers:
-
-```bash
-reproduce/jobs/submit.sh t04_main_results      # run array + build/verify stage
-```
-
-## Quick start: Oklahoma smoke test
-
-Runs Resource Allocation on the included Oklahoma graph on CPU (about 30 s):
-
-```bash
-make smoke
-```
-
-| Metric | Expected value |
-|---|---:|
-| Precision@10 | 0.1974 |
-| Degree EG@10 | 5.26 |
-| PageRank EG@10 | 7.97 |
-| Closeness EG@10 | 12.04 |
+Code and results for the paper *Coreness-Aware Fair Link Recommendation*.
+CAFE combines an HL-GNN link predictor with coreness-aware re-weighting
+(CAFE-Pre), a coreness penalty in the training loss (CAFE-In), fusion with the
+Resource Allocation heuristic and a mobility boost for peripheral targets.
 
 ## Repository layout
 
 ```text
-CAFE/
-├── backbone/          HL-GNN backbone
-├── baselines/         comparison methods
-├── core/              data loading, training, evaluation
-├── fairness_methods/  CAFE interventions (coreness penalty, re-weighting, mobility boost)
-├── metrics/           precision, Equality Gain (degree, PageRank, closeness), demographic gaps
-├── experiments/       experiment runners (run_*.py) and run_with.py (evaluation-protocol launcher)
-├── analysis/          analysis runners behind Tables 2, 5, 9, 10, 17-19 and Figures 1, 4
-├── reproduce/         table/figure builders, verification, source indexes, Slurm jobs
-├── evidence/          checksummed snapshot of the result files behind the paper
-├── configs/           published configurations and release checksums
-├── data/              public datasets (Ego-Facebook, Oklahoma97, UNC28)
-├── results_legacy_eg_check/  certified release outputs (hash-locked)
-├── paper/             the manuscript
-├── docs/              reproducibility protocol and audit
-└── tests/             pipeline tests (make test)
+backbone/ baselines/ core/ fairness_methods/ metrics/   model, baselines and metrics
+experiments/   scripts that train, evaluate and summarize (produce results)
+tables/        one script per table and figure of the paper (read results)
+results/       the results the paper's tables are built from
+configs/       selected configurations
+data/          public datasets (Ego-Facebook, Oklahoma97, UNC28)
+tests/
 ```
 
-## Data
+## Installation
 
-Ego-Facebook, Oklahoma97 and UNC28 are included under `data/SNAP/`.  Pokec-n
-and Brightkite are evaluated in the paper but too large to distribute; the
-jobs expect them under `data/SNAP/pokec_n` and `data/SNAP/brightkite` (see
-[`data/README.md`](data/README.md)).  Tables and figures still rebuild without
-them, from `evidence/`.
+```bash
+conda env create -f environment.yml          # full GPU environment (experiments)
+conda env create -f environment-smoke.yml    # CPU environment (tables, tests, smoke test)
+```
 
-## Experiments
+## Building the tables and figures
 
-The runners in `experiments/` train and evaluate one method family each:
-`run_baselines.py` (heuristics, GNN, fairness and tail-node baselines),
-`run_cafe.py` (CAFE-In, CAFE-Pre, fusion control, partial pipelines),
-`run_cafe_p.py` (HL-GNN backbone, CAFE^-P), `run_coreness_inverse.py` and
-`run_mobility_boost.py` (single-component ablations), `run_significance.py`
-(split-resampled protocol), `run_exposure_acceptance.py` (exposure and
-acceptance models), `run_runtime_benchmark.py`, `run_k_sensitivity.py`.
-`experiments/run_with.py` adds the two evaluation options used for the paper
-(exact Closeness on the large graphs, split-seed injection).  The jobs in
-`reproduce/jobs/` contain the exact command lines.
+```bash
+python -m tables              # every table and figure -> build/
+python -m tables T04 F03      # selected ones
+python -m tables --list       # what each script needs
+```
 
-Equality Gain follows the paper's released definition (result marker
-`legacy_indegree_reconstructed`); see [`docs/reproducibility.md`](docs/reproducibility.md).
+No GPU or raw data is needed: every number is recomputed from the per-run
+results in [`results/`](results/) (its README lists which files feed which
+table).  Output: `build/T04.tex`, …, `build/F03.pdf`.  Tables 1, 3, 12 and 14
+and Figure 2 are hand-authored.  Table 6(a) and Table 17 need experiment
+outputs that are not part of `results/` (see below).
 
-## Verification targets
+## Re-running the experiments
 
-| Target | Checks |
+Training requires a GPU.  Pokec-n and Brightkite are not distributed (see
+[`data/README.md`](data/README.md)); the other datasets are in `data/SNAP/`.
+All runs use the configurations in [`configs/best_configs.csv`](configs/best_configs.csv),
+training seeds 42-51 on a fixed 85/5/10 split, K=10, 500 epochs, batch size
+16384 and learning rate 1e-3.  Every script documents its options with `--help`.
+
+```bash
+cd experiments
+DATA=$PWD/../data/SNAP
+COMMON="--data_path $DATA --encoder HLGNN --predictor MLP --epochs 500 --eval_steps 10 \
+        --patience 50 --batch_size 16384 --lr 0.001 --runs 10 --coreness_alpha 1.0 \
+        --use_equality_gain True --use_centrality_gain True"
+
+# Baselines (Table 4): heuristics, GNN, fairness and tail-node methods
+python run_baselines.py --data_name oklahoma --data_path $DATA --encoder HLGNN --runs 10 --seed 42 \
+    --epochs 300 --batch_size 16384 --use_equality_gain True --use_centrality_gain True \
+    --centrality_types pagerank,closeness --results_dir ../outputs \
+    --methods random,pa,cn,aa,ra,lightgcn,ssnet,cross_link_bias,ltlp,tailsteak,fairadj,lba,moral
+
+# HL-GNN backbone (no fusion, no boost)
+python run_cafe_p.py --data_name oklahoma $COMMON --beta_ra 0.0 --lambda_mobility 0.0 \
+    --results_file ../outputs/oklahoma/hl-gnn.json
+
+# CAFE-In and CAFE-Pre (Oklahoma configurations from configs/best_configs.csv)
+python run_cafe.py --data_name oklahoma $COMMON --centrality_types pagerank,closeness \
+    --penalization_mode inproc --use_mobility_boost True \
+    --lambda_fair 0.3 --beta_ra 5.0 --lambda_mobility 0.5 --results_file ../outputs/oklahoma/cafe-in.json
+python run_cafe.py --data_name oklahoma $COMMON --centrality_types pagerank,closeness \
+    --penalization_mode preproc --use_mobility_boost True \
+    --preproc_alpha 1.0 --beta_ra 0.5 --lambda_mobility 0.5 --results_file ../outputs/oklahoma/cafe-pre.json
+```
+
+Protocol options:
+
+* **Pokec-n and Brightkite.** For `run_cafe.py` add `--eval_skip_test True
+  --eval_max_nodes 5000 --eval_steps 25 --patience 6`; for Brightkite pass its
+  temporal split, `--split_file $DATA/brightkite/temporal_split.pt`.  Evaluate
+  Closeness exactly by starting the runner through `run_with.py`:
+  `python run_with.py --exact-closeness run_cafe.py --data_name pokec_n ...`.
+* **Split-resampled protocol (Table 15).** Train seed *s* on split *s*:
+  `python run_with.py --split-seed 3 run_cafe.py ... --runs 1 --seed 3`.
+* **Acceptance models (Table 11).** Add `--acceptance_probe_jsonl <file>` to a runner.
+
+| Artifact | Experiment scripts (`experiments/`) |
 |---|---|
-| `make verify-paper` | every table rebuilt from `evidence/` and compared with the manuscript |
-| `make verify-evidence` | SHA-256 of every evidence file |
-| `make verify-certified` | manuscript, configuration file and certified outputs |
-| `make verify-data` | processed public datasets |
-| `make test` | pipeline tests |
-| `make check-release` | all of the above except the tests |
+| Table 2 | `dataset_statistics.py` |
+| Tables 4, 7, Figure 3 | `run_baselines.py`, `run_cafe_p.py`, `run_cafe.py`, `run_coreness_inverse.py`, `run_mobility_boost.py` |
+| Tables 5, 18(a,c), Figure 4 | `run_stratified_cafe.py`, then `bin_perturbation_size.py` and `summarize_stratified.py` |
+| Table 6 | `run_stratified_cafe.py --runs 10 --include_fusion True`; `run_exposure_acceptance.py`, then `summarize_exposure.py` |
+| Tables 8, 9, 16 | `run_baselines.py` (FairAdj, LBA, MORAL), CAFE runners, `summarize_demographic.py`, `run_significance.py`, `coreness_by_group.py` |
+| Table 10 | `closeness_mechanism.py`, then `summarize_closeness_probe.py` |
+| Table 11 | CAFE runners and `run_baselines.py --methods ra` with `--acceptance_probe_jsonl` |
+| Table 13 | `run_runtime_benchmark.py` |
+| Table 15 | runners via `run_with.py --split-seed s`, seeds 0-9 |
+| Table 17 | `run_stratified_cafe.py --split_file random --split_seed s --allow_brightkite_random_control True` (s = 42-51), then `finalize_brightkite_random_control.py` |
+| Table 18(b) | `rq1_structural_controls.py` |
+| Table 19 | `run_precision_by_coreness.py`, then `diagnosis_conditional_logit.py` |
+| Table 20 | `run_k_sensitivity.py` |
+| Figure 1 | `run_precision_by_coreness.py --data_name unc`, then `summarize_stratified.py` |
+
+To build the tables from your own results, arrange them like `results/` and
+run `CAFE_RESULTS=/path/to/results python -m tables`.
+
+## Checks
+
+```bash
+make test          # result checksums, every table builds, spot values
+make smoke         # Resource Allocation on Oklahoma, CPU, ~30 s
+make verify-data   # included datasets
+```
 
 ## License and citation
 
-Code: [MIT License](LICENSE).  Dataset redistribution terms are those of the
+Code: [MIT License](LICENSE).  Datasets remain under the terms of their
 original providers.  Citation metadata: [`CITATION.cff`](CITATION.cff).

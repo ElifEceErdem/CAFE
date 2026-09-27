@@ -13,7 +13,7 @@ For each seed s:
   3. Append one row per (seed, method, metric) to a long-format CSV.
 
 Because every method within a seed shares the split, per-seed differences
-are properly paired; analysis/significance_tests.py consumes the CSV and
+are properly paired; tables/t16_demographic_protocol.py consumes the CSV and
 runs paired t-tests / Wilcoxon with Holm correction and effect sizes.
 
 The CSV is written incrementally after each seed, and seeds already present
@@ -86,7 +86,7 @@ def argument():
     parser.add_argument('--fusion_beta', type=float, default=None,
                         help='beta for the fusion-only control (default: cafe_in_beta)')
     parser.add_argument('--selected_configs', type=str, default=None,
-                        help='Frozen egfix selected_configs.csv; when supplied, '
+                        help='Frozen selected_configs.csv; when supplied, '
                              'all six CAFE parameters are read from it')
     parser.add_argument('--protocol', type=str, default='paired',
                         choices=['headline', 'paired'],
@@ -338,7 +338,7 @@ def main():
         )
         if str(split_path).lower() == 'random':
             raise ValueError(
-                "The egfix campaign does not permit a random Brightkite split"
+                "This protocol does not permit a random Brightkite split"
             )
         if not os.path.isfile(split_path):
             raise FileNotFoundError(
@@ -355,7 +355,7 @@ def main():
         and not np.isclose(fusion_beta, args.cafe_in_beta)
     ):
         raise ValueError(
-            "The egfix aggregate requires matched-beta fusion: "
+            "This protocol requires matched-beta fusion: "
             f"fusion={fusion_beta}, CAFE-In={args.cafe_in_beta}"
         )
     k_values = [int(x) for x in args.k_values.split(',')]

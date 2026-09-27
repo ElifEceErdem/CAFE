@@ -4,7 +4,7 @@ MORAL Integration Module for Fairness Experiments
 Integrates the faithful MORAL model with the paper's greedy KL-divergence
 ranking aggregation (Algorithm 1, Appendix F).
 
-Core pipeline (matching /var/scratch/eerdem/MORAL/main.py):
+Core pipeline (matching main.py of https://github.com/joaopedromattos/MORAL):
   1. Train per-group encoder/predictor pairs via MORAL.fit()
   2. Score all test edges via MORAL.predict()
   3. Compute target distribution phi from training graph edge-type proportions

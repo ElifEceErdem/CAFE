@@ -602,7 +602,7 @@ class UGEBaseline(nn.Module):
 
 
 # ==================== MORAL ====================
-# Faithful port of moral_original.py from /var/scratch/eerdem/MORAL/
+# Faithful port of the official MORAL implementation (https://github.com/joaopedromattos/MORAL)
 # Key design:
 #   - NUM_GROUPS = 3 (edge-level groups: sens[u]+sens[v])
 #   - One encoder + one predictor per edge-group (3 each)
@@ -764,9 +764,9 @@ class MORAL(nn.Module):
     Tracks best validation checkpoint and restores it after training.
 
     Reference: "Breaking the Dyadic Barrier: Rethinking Fairness in Link Prediction
-    Beyond Demographic Parity" -- the MORAL implementation used in the AAAI submission.
+    Beyond Demographic Parity" -- the official MORAL implementation.
 
-    Original: /var/scratch/eerdem/MORAL/moral_original.py
+    Original: https://github.com/joaopedromattos/MORAL
     """
 
     def __init__(

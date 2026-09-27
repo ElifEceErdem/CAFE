@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-SOURCE = REPO / "analysis" / "best_configs.csv"
+SOURCE = REPO / "configs" / "best_configs.csv"
 SELECTED = REPO / "experiments" / "configs" / "legacy_best_configs_selected.csv"
 LINEAGE = REPO / "experiments" / "configs" / "legacy_best_configs_lineage.json"
 
@@ -178,9 +178,9 @@ def verify_lineage() -> None:
         ).get("publishable_as_evidence_for_eq8"),
     }
     wanted = {
-        "source.path": str(SOURCE),
+        "source.path": str(SOURCE.relative_to(REPO)),
         "source.sha256": SOURCE_SHA256,
-        "selected_configs.path": str(SELECTED),
+        "selected_configs.path": str(SELECTED.relative_to(REPO)),
         "selected_configs.selected_configs_sha256": SELECTED_SHA256,
         "selected_configs.row_count": len(EXPECTED),
         "configuration_selection.evaluation_split": "test",

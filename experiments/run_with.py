@@ -15,9 +15,7 @@
                        (``exact_metric_calls.jsonl``) and the split fingerprint
                        (``split_evidence.json``).
 
-The runner itself is unchanged; this wrapper reproduces what the September
-validation campaigns (``reevaluate_closeness_v1.py``,
-``prepare_table15_aligned.py``) did around it.
+The runner itself is unchanged.
 """
 import argparse
 import contextlib

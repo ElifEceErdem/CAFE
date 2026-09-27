@@ -463,7 +463,7 @@ class SSNet(torch.nn.Module):
     normalized adjacency) with a learned self-rescaling MLP applied to the
     final node embeddings. Scoring is via dot product.
 
-    Matches the original implementation at /var/scratch/eerdem/SSNet/:
+    Matches the official implementation (https://github.com/CGCL-codes/ssnet):
     - LightGCN: message passing with edge weight = 1/sqrt(d_u * d_v), no nonlinearities
     - Scaling MLP: Linear(64->32) -> Tanh -> Linear(32->1, no bias) -> Sigmoid
     - No tao division (use_tao defaults to 0/False in original config)

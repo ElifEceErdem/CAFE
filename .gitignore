@@ -1,126 +1,22 @@
-# ---------------------------------------------------------------------------
 # Python
-# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.egg-info/
 .ipynb_checkpoints/
 .venv/
 
-# ---------------------------------------------------------------------------
 # OS / editor
-# ---------------------------------------------------------------------------
 .DS_Store
-Thumbs.db
 *.swp
 
-# ---------------------------------------------------------------------------
-# Datasets
-# Large graphs are downloaded/prepared by the loader rather than committed.
-# ---------------------------------------------------------------------------
-data/SNAP/*
+# Generated tables and figures (python -m tables)
+build/
 
-# ---------------------------------------------------------------------------
-# Job scripts
-# The canonical, table-indexed suite lives in experiments/jobs/ and IS tracked.
-# The historical top-level jobs/ tree is cluster-specific scratch plus hundreds
-# of megabytes of Slurm logs; only the egfix campaign definitions are kept.
-# ---------------------------------------------------------------------------
-/jobs/*
-!/jobs/egfix/
-!/jobs/egfix/**
-!/jobs/egfix_sum*/
-!/jobs/egfix_sum*/**
-/jobs/egfix*/logs/
-/jobs/**/logs/
+# Experiment outputs (the result files the paper uses are in results/)
+outputs/
+logs/
+slurm-*.out
 
-# ---------------------------------------------------------------------------
-# Experiment output
-#
-# Raw result trees are reproducible from experiments/jobs/ and far too large to
-# version.  The GENERATED TABLES are the artifacts worth tracking, so
-# results_repro/tables/ is explicitly re-included below.
-# ---------------------------------------------------------------------------
-/results/*
-!/results/README.md
-/results_repro/*
-/results_egfix/
-/results_penalty_reduction/
-/results_pen_smoke/
-/results_random_split_archive/
-/results_verify/
-/logs/
-**/slurm-*.out
-
-
-# ---------------------------------------------------------------------------
-# Analysis intermediates
-#
-# Per-node CSVs run to tens of megabytes and are byproducts of the campaigns in
-# experiments/jobs/.  The small per-bin/summary CSVs next to them are kept:
-# they are what the table generators actually read.
-# ---------------------------------------------------------------------------
-analysis/plots/**/stratified_cafe_*.csv
-analysis/plots/**/exposure_per_node_*.csv
-analysis/plots/**/stratified_cafe_*.csv.gz
-analysis/plots/**/exposure_per_node_*.csv.gz
-analysis/plots/**/*_raw.csv
-analysis/plots/**/*.pdf
-
-# Same story for the RQ1 conditional-diagnosis campaign: one row per node per
-# model per run, so the pokec_n shards alone exceed GitHub's 100 MB file limit.
-# The binned/summary siblings (eg_by_coreness_*, diagnosis_logit_*) are kept.
-results_rq1_controls/**/diagnosis_per_user_hits*.csv
-results_rq1_controls/**/precision_by_coreness_*.csv
-
-# Written by generate_final_tables.py against whichever tree was aggregated
-# last, so they go stale silently.  results_repro/tables/ is authoritative.
-analysis/table1_precision_equality_gain.csv
-analysis/table2_precision_demographic.csv
-analysis/best_configs.csv
-
-# ---------------------------------------------------------------------------
-# Manuscript
-# Sources are tracked; build products and the compiled PDF are not.
-# ---------------------------------------------------------------------------
-*.aux
-*.bbl
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.synctex.gz
-*.toc
-
-# Slurm output for the table suite. Keep the directory: sbatch cannot create
-# it, and a missing output dir fails the job before the script ever runs.
-experiments/jobs/logs/*
-!experiments/jobs/logs/.gitkeep
-
-# ---------------------------------------------------------------------------
-/ToRS_paper/
-/ToRS_sample_papers/
-/recsys_reviews_rebuttal/
-RecSys_2026_paper_486 (3).pdf
-
-/results_rq1_controls
-/results_asf
-/results_k_sensitivity
-/experiments/results-26-08-05
-/experiments/configs/
-audit_p1.md
-audit_p2.md
-audit_p3.md
-audit_p4.md
-audit_p5.md
-
-baselines/__pycache__/
-backbone/__pycache__/
-core/__pycache__/
-
-# ---------------------------------------------------------------------------
-# Reproduction pipeline outputs (python -m reproduce build / job campaigns)
-# ---------------------------------------------------------------------------
-/build/
-/logs/
+# Large datasets, obtained separately (see data/README.md)
+data/SNAP/pokec_n/
+data/SNAP/brightkite/

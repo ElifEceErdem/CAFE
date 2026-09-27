@@ -3,7 +3,7 @@ Baseline experiment runner for the paper's comparison tables (Tables 4 & 5).
 
 Runs the non-CAFE methods through baselines.BaselineWrapper and writes
 result JSONs in the directory layout expected by
-analysis/generate_final_tables.py:
+experiments/result_extraction.py:
 
   results/<dataset>/baselines/          random, PA, CN, AA, RA   (one file, keyed by method)
   results/<dataset>/lightgcn/           LightGCN
@@ -199,7 +199,7 @@ def save_results(per_method_runs, args, ts):
         }
         # Write-then-rename: a kill during the dump must not leave the previous
         # (valid) JSON truncated. The .tmp suffix keeps it out of the *.json
-        # globs in analysis/generate_final_tables.py.
+        # globs in experiments/result_extraction.py.
         tmp_path = out_path + '.tmp'
         with open(tmp_path, 'w') as f:
             json.dump(payload, f, indent=2)

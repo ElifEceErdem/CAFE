@@ -12,12 +12,15 @@ matrix before producing per-seed, summary, paired-contrast, and LaTeX outputs.
 
 Examples
 --------
-Run one shard (normally done by ``reproduce/jobs/t20_k_sensitivity.job``)::
+Run one shard (one per dataset and training seed 42-51)::
 
     python -u experiments/run_k_sensitivity.py run \
         --dataset unc --seed 42 \
-        --campaign-dir results_k_sensitivity/corrected_k5_k20_v1 \
-        --selected-configs results_egfix/20260724_degree_eg_sum_in_v1/todo3/selected_configs.csv
+        --campaign-dir outputs/k_sensitivity \
+        --selected-configs experiments/configs/legacy_best_configs_selected.csv \
+        --upstream-lineage experiments/configs/legacy_best_configs_lineage.json \
+        --penalty-reduction mean --configuration-origin legacy_test_selected \
+        --allow-nonedgewise-cafe-in --exact-closeness
 
 Finalize only after all shards exist::
 
@@ -92,7 +95,6 @@ METRIC_PREFIXES = {
 
 CODE_FILES = (
     "experiments/run_k_sensitivity.py",
-    "reproduce/jobs/t20_k_sensitivity.job",
     "experiments/run_with.py",
     "metrics/closeness_exact_v1.py",
     "experiments/configs/verify_legacy_best_configs.py",

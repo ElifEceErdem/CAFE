@@ -17,12 +17,12 @@
     "publishable_as_evidence_for_eq8": false
   },
   "selected_configs": {
-    "path": "/home/eerdem/workspace/CAFE/experiments/configs/legacy_best_configs_selected.csv",
+    "path": "experiments/configs/legacy_best_configs_selected.csv",
     "row_count": 10,
     "selected_configs_sha256": "a6162e8bd89893b38bf41b5782a7996a34ea6364be8731b23690fb69f945ebef"
   },
   "source": {
-    "path": "/home/eerdem/workspace/CAFE/analysis/best_configs.csv",
+    "path": "configs/best_configs.csv",
     "role": "authoritative input requested for this legacy diagnostic campaign",
     "sha256": "44ea8142fa6e953dc2c79fbe3d5b6ae5e4eb77ad08a3a72636db31942e9c4ade"
   },
