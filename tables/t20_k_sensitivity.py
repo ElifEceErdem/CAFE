@@ -1,8 +1,10 @@
 """Table 20 -- fixed-configuration sensitivity at K=5 and K=20 (Appendix E).
 
 Input: ``results/summaries/k_sensitivity/k_sensitivity_summary.csv``, the
-finalized output of ``experiments/run_k_sensitivity.py``.  Mean +- sample SD
-over training seeds 42-51.
+finalized output of ``experiments/run_k_sensitivity.py`` (run with
+``--exact-closeness``: legacy Equality Gain as in Table 4, exact generalized
+Closeness on Pokec-n and Brightkite).  Mean +- sample SD over training seeds
+42-51.
 """
 
 from tables._common import resolve
