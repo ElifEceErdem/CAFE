@@ -28,9 +28,13 @@ if [[ ! -f "${REPO}/reproduce/__main__.py" ]]; then
 fi
 cd "${REPO}"
 
-if [[ -z "${CAFE_NO_CONDA:-}" ]] && command -v conda >/dev/null 2>&1; then
-    eval "$(conda shell.bash hook)"
-    conda activate "${CONDA_ENV:-hl_gnn}"
+if [[ -z "${CAFE_NO_CONDA:-}" ]]; then
+    if ! command -v conda >/dev/null 2>&1 && [[ -f "${HOME}/.bashrc" ]]; then
+        set +u; source "${HOME}/.bashrc" || true; set -u   # batch shells do not read it
+    fi
+    if command -v conda >/dev/null 2>&1; then
+        set +u; eval "$(conda shell.bash hook)"; conda activate "${CONDA_ENV:-hl_gnn}"; set -u
+    fi
 fi
 # Cluster-specific CUDA driver location (DAS-5); harmless elsewhere.
 if [[ -d /cm/local/apps/cuda-driver/libs/current/lib64 ]]; then

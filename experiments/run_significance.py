@@ -48,6 +48,7 @@ for path in [parent_dir, current_dir, os.path.join(parent_dir, 'backbone')]:
 from core import set_seed, load_dataset, str2bool  # noqa: E402
 from core.data_loader import load_sensitive_attr  # noqa: E402
 from core.evaluation import compute_metrics_from_recs, compute_equality_gain_metrics  # noqa: E402
+from core.statistics import _eg_semantics_marker  # noqa: E402  (label = metric code in use)
 from metrics.coreness import compute_coreness  # noqa: E402
 from metrics.centrality_equality_gain import compute_all_centrality_equality_gains  # noqa: E402
 from metrics.graph_utils import canonicalize_undirected_edges  # noqa: E402
@@ -518,7 +519,7 @@ def main():
                     'value': value,
                     'protocol': args.protocol,
                     'evaluation_split': 'test',
-                    'eg_graph_semantics': 'simple_undirected_set_union',
+                    'eg_graph_semantics': _eg_semantics_marker(),
                     'penalty_reduction': args.penalty_reduction,
                     'closeness_random_seed': args.closeness_seed,
                     'closeness_sample_size': args.closeness_sample_size,
@@ -548,7 +549,7 @@ def main():
         'csv_sha256': _sha256_file(args.out_csv),
         'selected_configs_sha256': selected_configs_sha256,
         'source_manifest_sha256': source_manifest_sha256,
-        'eg_graph_semantics': 'simple_undirected_set_union',
+        'eg_graph_semantics': _eg_semantics_marker(),
         'penalty_reduction': args.penalty_reduction,
     }
     marker_path = f"{args.out_csv}.complete.json"

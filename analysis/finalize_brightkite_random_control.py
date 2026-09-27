@@ -31,7 +31,7 @@ METHODS = ("RA", "HL-GNN", "Fusion", "CAFE-In", "CAFE-Pre")
 PROFILE = "brightkite_connectivity_preserving_random_85_5_10_v1"
 SCHEMA_VERSION = 1
 CODE_FILES = (
-    "experiments/jobs/t20_brightkite_random_control.job",
+    "reproduce/jobs/t17_brightkite_random.job",
     "experiments/configs/verify_legacy_best_configs.py",
     "analysis/run_stratified_cafe.py",
     "analysis/run_precision_by_coreness.py",

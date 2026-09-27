@@ -1,16 +1,20 @@
 """Table 20 -- fixed-configuration sensitivity at K=5 and K=20 (Appendix E).
 
-Input: ``results_k_sensitivity/legacy_best_configs_nonedgewise_k5_k20_v1/
-finalized/k_sensitivity_summary.csv`` from ``experiments/run_k_sensitivity.py``
-(job ``t20_k_sensitivity.job``).  Mean +- sample SD over the frozen seeds.
-Note: Closeness on Brightkite/Pokec-n here uses the approximate sampler of
-the original campaign, not the exact evaluation of Tables 4/7/11/15.
+Input: ``<campaign>/finalized/k_sensitivity_summary.csv`` from
+``experiments/run_k_sensitivity.py`` (job ``t20_k_sensitivity.job``).  Mean +-
+sample SD over the frozen seeds.  ``CAFE_T20_CAMPAIGN`` selects the campaign.
+The default is the campaign of 2026-08-04 behind the printed table; it predates
+the Equality-Gain revert (corrected Degree EG) and samples Closeness on
+Brightkite/Pokec-n.
 """
+import os
+
 from reproduce.paths import resolve
 from reproduce.table import DATASET_LABEL, cell, fmt, read_csv, tabular, write_text
 
 ID = "T20"
-INPUT = "results_k_sensitivity/legacy_best_configs_nonedgewise_k5_k20_v1/finalized/k_sensitivity_summary.csv"
+CAMPAIGN = os.environ.get("CAFE_T20_CAMPAIGN", "results_k_sensitivity/legacy_best_configs_nonedgewise_k5_k20_v1")
+INPUT = f"{CAMPAIGN}/finalized/k_sensitivity_summary.csv"
 ORDER = ["ego-facebook", "oklahoma", "unc", "pokec_n", "brightkite"]
 METHODS = [("RA", "RA"), ("HL-GNN", "HL-GNN"), ("Fusion", "HL-GNN+RA"), ("CAFE-In", "CAFE-In"),
            ("CAFE-Pre", "CAFE-Pre")]

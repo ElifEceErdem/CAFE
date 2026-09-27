@@ -8,7 +8,10 @@
 #SBATCH --output=logs/%x_%A_%a.out
 #
 # Table 20: K=5 and K=20 at the K=10 configurations (paper profile: legacy
-# configurations, mean penalty reduction).  Task i -> dataset i/10, seed 42+i%10.
+# configurations, mean penalty reduction), evaluated like Tables 4/7/11/15:
+# legacy Degree EG and exact generalized Closeness on Pokec-n and Brightkite
+# (--exact-closeness).  Task i -> dataset i/10, seed 42+i%10.
+# Pokec-n shards take ~3 h each; the others well under 1 h.
 #
 #   sbatch reproduce/jobs/t20_k_sensitivity.job
 #   sbatch --export=ALL,STAGE=build reproduce/jobs/t20_k_sensitivity.job
@@ -17,7 +20,9 @@ TASK=${SLURM_ARRAY_TASK_ID:-0}
 DATASETS_T20=(ego-facebook oklahoma unc pokec_n brightkite)
 export DS=${DS:-${DATASETS_T20[$((TASK / 10))]}}
 source "${CAFE_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}/reproduce/jobs/_env.sh"
-CAMPAIGN=${OUT}/results_k_sensitivity/legacy_best_configs_nonedgewise_k5_k20_v1
+T20_CAMPAIGN=${T20_CAMPAIGN:-results_k_sensitivity/k5_k20_legacy_eg_exact_closeness_v2}
+CAMPAIGN=${OUT}/${T20_CAMPAIGN}
+export CAFE_T20_CAMPAIGN=${T20_CAMPAIGN}
 
 if [[ "${STAGE}" == "build" ]]; then
     run_py experiments/run_k_sensitivity.py finalize --campaign-dir "${CAMPAIGN}" --if-complete
@@ -32,4 +37,4 @@ run_py experiments/run_k_sensitivity.py run --dataset "${DS}" --seed $((42 + TAS
     --selected-configs "${REPO}/experiments/configs/legacy_best_configs_selected.csv" \
     --upstream-lineage "${REPO}/experiments/configs/legacy_best_configs_lineage.json" \
     --runtime-manifest "${RUNTIME}" --penalty-reduction mean --configuration-origin legacy_test_selected \
-    --allow-nonedgewise-cafe-in
+    --allow-nonedgewise-cafe-in --exact-closeness

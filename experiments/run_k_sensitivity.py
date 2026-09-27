@@ -12,7 +12,7 @@ matrix before producing per-seed, summary, paired-contrast, and LaTeX outputs.
 
 Examples
 --------
-Run one shard (normally done by ``experiments/jobs/t19_k_sensitivity.job``)::
+Run one shard (normally done by ``reproduce/jobs/t20_k_sensitivity.job``)::
 
     python -u experiments/run_k_sensitivity.py run \
         --dataset unc --seed 42 \
@@ -63,7 +63,21 @@ SEEDS = tuple(range(42, 52))
 METHODS = ("RA", "HL-GNN", "Fusion", "CAFE-In", "CAFE-Pre")
 EVALUATED_K = (5, 10, 20)
 REPORTED_K = (5, 20)
-EG_SEMANTICS = "simple_undirected_set_union"
+
+
+def _current_eg_semantics() -> str:
+    """Equality-Gain definition of the metric code in use (see core/statistics.py)."""
+    from metrics import equality_gain as _eg
+    if hasattr(_eg, "SIMPLE_UNDIRECTED"):
+        return "simple_undirected_set_union"
+    return "legacy_indegree_reconstructed"
+
+
+EG_SEMANTICS = _current_eg_semantics()
+# Graphs on which --exact-closeness replaces the sampled (ApproxCloseness)
+# evaluation of the legacy code; smaller graphs are already evaluated exactly.
+EXACT_CLOSENESS_DATASETS = ("pokec_n", "brightkite")
+EXACT_CLOSENESS_VERSION = "exact_generalized_v1_float32_positive_support"
 DEFAULT_PENALTY_REDUCTION = "sum"
 KNOWN_NONEDGEWISE_CONFIG_SHA256 = (
     "57b80781dbd15cc367c8c857d92ff535d63084a20ed2110438185f4e49fb13df"
@@ -78,7 +92,9 @@ METRIC_PREFIXES = {
 
 CODE_FILES = (
     "experiments/run_k_sensitivity.py",
-    "experiments/jobs/t19_k_sensitivity.job",
+    "reproduce/jobs/t20_k_sensitivity.job",
+    "experiments/run_with.py",
+    "metrics/closeness_exact_v1.py",
     "experiments/configs/verify_legacy_best_configs.py",
     "experiments/run_significance.py",
     "experiments/cafe_methods.py",
@@ -326,6 +342,7 @@ def _protocol_document(
     allow_nonedgewise: bool,
     penalty_reduction: str,
     configuration_origin: str,
+    exact_closeness: bool = False,
 ) -> Dict[str, object]:
     if configuration_origin == "legacy_test_selected":
         configuration_policy = (
@@ -365,6 +382,12 @@ def _protocol_document(
             "random_seed": 42,
             "sample_size": 0,
             "epsilon": 0.1,
+            "exact_generalized_datasets": (
+                list(EXACT_CLOSENESS_DATASETS) if exact_closeness else []
+            ),
+            "exact_generalized_version": (
+                EXACT_CLOSENESS_VERSION if exact_closeness else None
+            ),
         },
         "large_graph_training_validation": {
             "datasets": ["pokec_n", "brightkite"],
@@ -557,10 +580,20 @@ def _runner_command(
     protocol_path: Path,
     out_csv: Path,
     penalty_reduction: str,
+    exact_closeness: bool = False,
+    record_dir: Path | None = None,
 ) -> list[str]:
+    launcher = []
+    if exact_closeness and dataset in EXACT_CLOSENESS_DATASETS:
+        # experiments/run_with.py activates metrics/closeness_exact_v1.py for
+        # the runner process and fails if no closeness evaluation used it.
+        launcher = [str(REPO / "experiments" / "run_with.py"), "--exact-closeness"]
+        if record_dir is not None:
+            launcher += ["--record-dir", str(record_dir)]
     command = [
         sys.executable,
         "-u",
+        *launcher,
         str(REPO / "experiments" / "run_significance.py"),
         "--data_name",
         dataset,
@@ -690,6 +723,7 @@ def run_shard(args: argparse.Namespace) -> int:
         allow_nonedgewise=args.allow_nonedgewise_cafe_in,
         penalty_reduction=args.penalty_reduction,
         configuration_origin=args.configuration_origin,
+        exact_closeness=args.exact_closeness,
     )
     protocol_path = _create_or_verify_protocol(campaign, protocol_document)
     protocol_sha256 = _sha256(protocol_path)
@@ -726,6 +760,8 @@ def run_shard(args: argparse.Namespace) -> int:
         protocol_path=protocol_path,
         out_csv=out_csv,
         penalty_reduction=args.penalty_reduction,
+        exact_closeness=args.exact_closeness,
+        record_dir=task_dir,
     )
     _atomic_write_text(task_dir / "command.sh", shlex.join(command) + "\n")
     _atomic_write_json(task_dir / "command.json", {"argv": command})
@@ -751,6 +787,12 @@ def run_shard(args: argparse.Namespace) -> int:
         raise KSensitivityError(
             f"Underlying completion marker missing: {runner_marker}"
         )
+    if args.exact_closeness and dataset in EXACT_CLOSENESS_DATASETS:
+        exact_marker = task_dir / "exact_process_complete.json"
+        if not exact_marker.is_file():
+            raise KSensitivityError(
+                f"Exact closeness was requested but {exact_marker} is missing"
+            )
 
     validation = _validate_shard(
         csv_path=out_csv,
@@ -765,6 +807,8 @@ def run_shard(args: argparse.Namespace) -> int:
         "command.sh",
         "command.json",
         "runner.log",
+        "exact_process_complete.json",
+        "exact_metric_calls.jsonl",
         "task.env",
         "runtime.conda-explicit.txt",
         "wrapper_command.sh",
@@ -1169,6 +1213,13 @@ def _parser() -> argparse.ArgumentParser:
         choices=("validation_selected", "legacy_test_selected"),
         default="validation_selected",
         help="honest provenance label for the frozen operating points",
+    )
+    run.add_argument(
+        "--exact-closeness",
+        action="store_true",
+        help="evaluate Closeness EG exactly on "
+        + ", ".join(EXACT_CLOSENESS_DATASETS)
+        + " (metrics/closeness_exact_v1.py), as in Tables 4, 7, 11 and 15",
     )
     run.add_argument("--dry-run", action="store_true")
 
