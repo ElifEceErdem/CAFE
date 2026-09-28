@@ -24,7 +24,7 @@ Usage:
     python run_runtime_benchmark.py --data_name oklahoma \
         --cafe_in_lambda 0.3 --cafe_pre_alpha 1.0 \
         --cafe_beta 5.0 --cafe_lam 0.5 --runs 3 \
-        --out_json ../results/oklahoma/runtime/runtime_oklahoma.json
+        --out_json ../outputs/runtime/runtime_oklahoma.json
 """
 
 import os

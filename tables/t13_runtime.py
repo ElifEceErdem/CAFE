@@ -1,15 +1,14 @@
 """Table 13 -- per-dataset wall-clock runtime in seconds (Appendix A.3).
 
-Input: ``results/<ds>/runtime/runtime_<ds>.json`` from
-``experiments/run_runtime_benchmark.py``.  Timings
-are hardware-specific; compare reruns with ``verify --tolerance``.
+Input: ``results/summaries/runtime/runtime_<ds>.json`` from
+``experiments/run_runtime_benchmark.py``.  Timings are hardware-specific.
 """
 from tables._common import read_json
 from tables._common import DATASET_LABEL, cell, tabular, write_text
 
 ID = "T13"
 ORDER = ["ego-facebook", "oklahoma", "unc", "pokec_n", "brightkite"]
-FILE = "runtime/runtime_{ds}.json"
+FILE = "summaries/runtime/runtime_{ds}.json"
 COLUMNS = [("coreness_s", "coreness_time", 1, False), ("ra_s", "ra_time", 2, False),
            ("train_vanilla_s", "train_vanilla", 0, True), ("train_cafe_in_s", "train_cafe_in", 0, True),
            ("train_cafe_pre_s", "train_cafe_pre", 0, True), ("infer_vanilla_s", "infer_vanilla", 2, False),

@@ -8,8 +8,7 @@ per-run values stored here.  `SHA256SUMS` lists every file.
 results/
 ├── index/       which result files feed each row of Tables 4, 7, 11 and 15
 ├── runs/        runner outputs, one folder per experiment campaign
-├── summaries/   reduced outputs of the analysis scripts
-└── runtime/     wall-clock benchmark (Table 13)
+└── summaries/   reduced outputs of the analysis scripts and the runtime benchmark
 ```
 
 | Artifact | Files | Produced by |
@@ -22,7 +21,7 @@ results/
 | Tables 9, 16 | `runs/2026-07-20_split_resampled_demographic` | `run_significance.py` |
 | Table 10 | `summaries/closeness_strata.csv` | `closeness_mechanism.py` → `summarize_closeness_probe.py` |
 | Table 11 | `index/acceptance_rows.csv` → `runs/2026-09-05_acceptance*`, `runs/2026-09-0*_exact_closeness*` | runners with `--acceptance_probe_jsonl` |
-| Table 13 | `runtime/` | `run_runtime_benchmark.py` |
+| Table 13 | `summaries/runtime/` | `run_runtime_benchmark.py` |
 | Table 15 | `index/paired_observations.csv` → `runs/2026-09-05_split_resampled`, `runs/2026-09-0*_exact_closeness*` | runners via `run_with.py --split-seed` |
 | Table 18(b) | `summaries/structural_controls/` | `rq1_structural_controls.py` |
 | Table 19 | `summaries/diagnosis_conditional/` | `run_precision_by_coreness.py` → `diagnosis_conditional_logit.py` |
