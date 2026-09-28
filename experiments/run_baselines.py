@@ -23,7 +23,7 @@ learning rate (MORAL: 3e-4 per Table 8).
 Usage:
     python run_baselines.py --data_name oklahoma --data_path ../data/SNAP \
         --methods random,pa,cn,aa,ra --runs 10 \
-        --results_dir ../results
+        --results_dir ../outputs
 """
 
 import os
@@ -115,7 +115,7 @@ def argument():
     parser.add_argument('--use_equality_gain', type=str2bool, default=True)
     parser.add_argument('--use_centrality_gain', type=str2bool, default=True)
 
-    parser.add_argument('--results_dir', type=str, default='../results')
+    parser.add_argument('--results_dir', type=str, default='../outputs')
     parser.add_argument('--acceptance_probe_jsonl', default=None,
                         help='Optional scalar-only RA acceptance pilot output; no predictions saved')
     return parser.parse_args()
