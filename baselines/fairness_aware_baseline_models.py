@@ -1864,8 +1864,6 @@ class LBA_GCNConv(nn.Module):
         x = self.lin(x)
         
         # Message Passing (simplified sparse matmul)
-        # AxW
-        # We can use spmm
         adj = torch.sparse_coo_tensor(edge_index, edge_weight, (x.size(0), x.size(0)))
         out = torch.sparse.mm(adj, x)
         return out
@@ -1968,12 +1966,6 @@ class LinkBiasAmplification(nn.Module):
                 c_mask = (labels == c)
                 c0_mask = c_mask & (sens == 0)
                 c1_mask = c_mask & (sens == 1)
-                
-                # Edges (u, v) where v is in class C AND u is in (Class C & Sens 0/1)
-                # Wait, repo logic:
-                # c0a_mask = c0_mask[edge_index[0]] & c_mask[edge_index[1]]
-                # This means u in (Group 0 AND Class C) and v in (Class C)
-                # So it's enforcing parity for IN-CLASS LINKS score distribution?
                 
                 # Masks for source nodes of edges in the batch
                 src_c0 = c0_mask[all_edges[0]]
@@ -2126,10 +2118,7 @@ def fairadj_project_sparse(indices, values, num_rows, device):
 
     Returns: projected values [nnz] with same ordering as input
 
-    Vectorised over rows: the previous implementation looped over num_rows in
-    Python, which costs ~73 s per call at pokec_n scale (66569 rows, 1.1M nnz)
-    -- ~16 h per 10-run experiment, and worse on GPU where each row becomes its
-    own set of kernel launches. This computes all rows in one segmented pass.
+    Vectorised over rows.
     """
     row_indices = indices[0]
     nnz = values.numel()
@@ -2150,9 +2139,6 @@ def fairadj_project_sparse(indices, values, num_rows, device):
     k = (pos + 1).to(values.dtype)
 
     # Per-row cumulative sum, via a global cumsum minus each row's base.
-    # Done in float64: a float32 global cumsum reaches ~1e5 at pokec_n scale,
-    # and subtracting to recover row-local sums of ~1 loses ~1e-2 to
-    # cancellation -- far too coarse for a simplex projection.
     csum_all = torch.cumsum(des.to(torch.float64), 0)
     csum_ext = torch.cat([csum_all.new_zeros(1), csum_all])
     cumsum = (csum_all - csum_ext[starts][row_s]).to(values.dtype)
@@ -2179,7 +2165,7 @@ class _SparseValuesMM(torch.autograd.Function):
     torch.sparse.mm's own backward (mm_mat1_sparse_backward in ATen) computes
     grad_out @ dense.T DENSELY and only afterwards applies sparse_mask, so
     routing autograd through a sparse_coo_tensor built from a requires_grad
-    values vector still allocates N^2 floats (16.51 GiB at pokec_n's N=66569).
+    values vector still allocates N^2 floats.
     d(loss)/d(a_ij) is just <grad_out_i, dense_j>, so we gather the rows/cols we
     actually need: [nnz, hidden] instead of [N, N].
     """
@@ -2319,8 +2305,7 @@ class FairAdj(nn.Module):
             # Differentiate w.r.t. the sparse VALUES, not the sparse tensor, and
             # do the propagation through sparse_values_mm rather than
             # torch.sparse.mm. Both are needed: asking autograd for the gradient
-            # of a sparse COO tensor materialises a dense N×N gradient
-            # (66569² × 4B = 16.5 GiB on pokec_n, larger than any GPU here), and
+            # of a sparse COO tensor materialises a dense N×N gradient and
             # torch.sparse.mm's backward builds that same dense N×N internally
             # even when the leaf is the [nnz] values vector. The update below
             # only ever consumed the gradient restricted to adj's sparsity
