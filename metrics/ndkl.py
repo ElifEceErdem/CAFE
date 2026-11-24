@@ -225,8 +225,7 @@ def build_edge_scores_for_ndkl(h_emb, recs_by_u, predictor=None, device=None, mo
                 edge_scores[(int(u), int(v))] = 1.0 / (rank + 1)
         return edge_scores
     
-    # Global mode requires computing scores... omitted for brevity as
-    # user implementation (1) handles list of groups directly.
+
     return {} 
 
 def compute_ndkl_from_recommendations(recs_by_u, node_categories, target_dist, k_values, edge_scores=None, mode='per_user'):
@@ -234,11 +233,6 @@ def compute_ndkl_from_recommendations(recs_by_u, node_categories, target_dist, k
     Compute NDKL for multiple K values from recommendations.
     """
     scores = {}
-    
-    # We iterate over users and average their NDKL?
-    # Or is NDKL computed over a single global ranking?
-    # User Implementation (1) takes `ranking` (list of groups).
-    # If mode='per_user', we average per-user NDKL.
     
     if mode == 'per_user':
         ndkl_sums = {k: 0.0 for k in k_values}
